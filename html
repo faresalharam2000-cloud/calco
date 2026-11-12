@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>نظام حسابات الشركة</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--ink:#1b2430;--muted:#6b7688;--line:#e3e8f0;--primary:#1f6feb;--primary-d:#1558c4;--ok:#0f9d58;--warn:#e8a33d;--danger:#e5484d;--radius:14px}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+h1,h2,h3{margin:0 0 12px}
+h3{font-size:16px}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.hint{background:#eef4ff;border:1px solid #d6e4ff;color:#204e9a;padding:10px 12px;border-radius:10px;font-size:13px;margin-top:14px}
+.hidden{display:none!important}
+.mt{margin-top:14px}
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(20,40,80,.08)}
+.auth-card.wide{max-width:780px}
+.auth-card h1{font-size:20px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);font-weight:600}
+input,select,button{font-family:inherit;font-size:14px}
+input,select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);outline:none;width:100%}
+input:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(31,111,235,.12)}
+input:disabled{background:#f1f3f7;color:#8b95a6}
+.btn{padding:10px 16px;border:1px solid var(--line);background:#fff;border-radius:10px;cursor:pointer;font-weight:700;color:var(--ink);transition:.15s}
+.btn:hover{background:#f6f8fc}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-d)}
+.btn.ghost{background:transparent}
+.btn.danger{background:#fdeaea;border-color:#f5c6c7;color:#b4262b}
+.btn.sm{padding:6px 10px;font-size:12px;border-radius:8px}
+.msg{font-size:13px;margin-top:10px;min-height:18px}
+.msg.err{color:var(--danger)}
+.msg.ok{color:var(--ok)}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.branch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.branch-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;cursor:pointer;transition:.15s;text-align:center;font-family:inherit}
+.branch-card:hover{border-color:var(--primary);box-shadow:0 6px 18px rgba(31,111,235,.12);transform:translateY(-2px)}
+.branch-icon{font-size:26px}
+.branch-name{font-weight:800;color:var(--ink)}
+.tabs{display:flex;gap:6px;background:#eef1f7;padding:5px;border-radius:12px;margin-bottom:16px}
+.tab{flex:1;padding:9px;border:0;background:transparent;border-radius:9px;cursor:pointer;font-weight:700;color:var(--muted)}
+.tab.active{background:#fff;color:var(--primary);box-shadow:0 2px 8px rgba(20,40,80,.08)}
+.app-tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:60px;z-index:5}
+.app-tabs .tab{flex:0 0 auto;padding:9px 16px;white-space:nowrap}
+.app-header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;flex-wrap:wrap}
+.brand{font-weight:900;font-size:16px;color:var(--primary)}
+.ctx{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.chip{background:#eef1f7;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#4a566b}
+.chip.strong{background:#e3edff;color:var(--primary-d)}
+.chip.user{background:#e9f7ef;color:#0b7a45}
+.view{padding:18px;max-width:1200px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(20,40,80,.04)}
+.grid{display:grid;gap:14px;margin-bottom:16px}
+.grid.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.grid.two{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.grid.two .card{margin-bottom:0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.stat-label{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px}
+.stat-value{font-size:20px;font-weight:900}
+.stat.primary .stat-value{color:var(--primary)}
+.stat.warn .stat-value{color:var(--warn)}
+.stat.ok .stat-value{color:var(--ok)}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+.span2{grid-column:1/-1}
+.tbl-wrap{overflow-x:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right}
+.tbl th{background:#f8fafd;font-size:12px;color:var(--muted);font-weight:800;white-space:nowrap}
+.tbl td.num,.tbl th.num{text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl tr:hover td{background:#fbfcfe}
+.tbl tfoot td{font-weight:900;background:#f8fafd}
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800}
+.badge.blue{background:#e3edff;color:#1558c4}
+.badge.purple{background:#f0e8ff;color:#6b3fd4}
+.badge.red{background:#fdeaea;color:#b4262b}
+.badge.green{background:#e9f7ef;color:#0b7a45}
+.badge.orange{background:#fff2e0;color:#a86400}
+.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:#1b2430;color:#fff;padding:12px 20px;border-radius:12px;font-weight:700;font-size:13px;opacity:0;transition:.25s;z-index:99}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.err{background:var(--danger)}
+.toast.ok{background:var(--ok)}
+#error-overlay{display:none;position:fixed;inset:0;background:#fff;z-index:99999;padding:24px;overflow:auto;font-family:monospace}
+#error-overlay h2{color:#c00}
+#error-msg{background:#fee;padding:16px;border-radius:10px;white-space:pre-wrap;word-break:break-word;font-size:13px;color:#900;border:1px solid #f5c6c7}
+#error-overlay button{padding:10px 20px;font-size:15px;cursor:pointer;margin-left:10px;border-radius:8px;border:1px solid #ccc;background:#f6f8fc}
+@media print{.app-header,.app-tabs,.btn{display:none!important}body{background:#fff}.card{box-shadow:none;border:1px solid #ddd}}
+</style>
+</head>
+<body>
+
+<div id="error-overlay">
+  <h2>⚠️ حدث خطأ في الصفحة</h2>
+  <p>انسخ الرسالة التالية وأرسلها لإصلاح المشكلة:</p>
+  <pre id="error-msg"></pre>
+  <div style="margin-top:20px">
+    <button onclick="location.reload()">إعادة تحميل</button>
+    <button onclick="try{localStorage.removeItem('accsys_v1');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
+  </div>
+</div>
+
+<div id="app-root"></div>
+
+<script>
+(function(){
+"use strict";
+
+function showError(msg){
+  var ov = document.getElementById('error-overlay');
+  var box = document.getElementById('error-msg');
+  if(ov && box){ ov.style.display='block'; box.textContent = msg; }
+}
+
+window.addEventListener('error', function(e){
+  showError((e.message||'') + '\n' + (e.filename||'') + ':' + (e.lineno||'') + ':' + (e.colno||'') + '\n\n' + ((e.error && e.error.stack) || ''));
+});
+
+try {
+
+var KEY = 'accsys_v1';
+var SKEY = 'accsys_session';
+var db = loadDB();
+var session = loadSession();
+var ui = { tab:'dashboard', reportPeriod:'day', reportFrom:'', reportTo:'' };
+
+function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function seedDB(){
+  var cid='comp_demo';
+  return {
+    companies:[{ id:cid, name:'شركة النموذج التجارية', code:'DEMO', password:'1234', currency:'ر.س',
+      branches:[
+        { id:'br_main', name:'الفرع الرئيسي', code:'01', cashOpening:0 },
+        { id:'br_jed',  name:'فرع جدة',       code:'02', cashOpening:0 }
+      ]}],
+    users:[
+      { id:'u1', companyId:cid, branchId:'br_main', name:'مدير النظام',   username:'admin', password:'1234', role:'مدير' },
+      { id:'u2', companyId:cid, branchId:'br_jed',  name:'مدير فرع جدة', username:'admin', password:'1234', role:'مدير' }
+    ],
+    contacts:[], sales:[], purchases:[], expenses:[], payments:[]
+  };
+}
+function loadDB(){
+  try{ var raw = localStorage.getItem(KEY); if(raw){ var obj = JSON.parse(raw); if(obj && obj.companies) return obj; } }catch(e){}
+  var s = seedDB();
+  try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){}
+  return s;
+}
+function saveDB(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ showError('تعذر حفظ البيانات: ' + e.message); } }
+function loadSession(){
+  try{
+    var s = JSON.parse(sessionStorage.getItem(SKEY)||'null');
+    if(s && s.companyId && s.branchId && s.userId) return s;
+  }catch(e){}
+  return { companyId:null, branchId:null, userId:null };
+}
+function saveSession(){ try{ sessionStorage.setItem(SKEY, JSON.stringify(session)); }catch(e){} }
+function resetSession(){ session = { companyId:null, branchId:null, userId:null }; saveSession(); }
+
+var root = document.getElementById('app-root');
+function $(s){ return document.querySelector(s); }
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]; }); }
+function num(n){ return Number(n||0); }
+function sum(arr, key){ return arr.reduce(function(a,x){ return a + num(x[key]); }, 0); }
+function isoLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function today(){ return isoLocal(new Date()); }
+function money(n){
+  var c = db.companies.find(function(x){ return x.id===session.companyId; });
+  var cur = (c && c.currency) || 'ر.س';
+  return num(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + cur;
+}
+function toast(msg, type){
+  var t = document.createElement('div');
+  t.className = 'toast ' + (type||'ok'); t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(function(){ t.classList.add('show'); });
+  setTimeout(function(){ t.classList.remove('show'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); },300); }, 2400);
+}
+function flash(msg, type){ var el = $('#msg'); if(el){ el.textContent = msg; el.className = 'msg ' + (type||'err'); } }
+function stat(label, value, cls){ return '<div class="stat '+(cls||'')+'"><div class="stat-label">'+label+'</div><div class="stat-value">'+value+'</div></div>'; }
+
+function currentCompany(){ return db.companies.find(function(c){ return c.id===session.companyId; }); }
+function currentBranch(){ var c = currentCompany(); return c && c.branches.find(function(b){ return b.id===session.branchId; }); }
+function currentUser(){ return db.users.find(function(u){ return u.id===session.userId; }); }
+
+function branchData(){
+  var bid = session.branchId;
+  return {
+    sales:     db.sales.filter(function(x){ return x.branchId===bid; }),
+    purchases: db.purchases.filter(function(x){ return x.branchId===bid; }),
+    expenses:  db.expenses.filter(function(x){ return x.branchId===bid; }),
+    payments:  db.payments.filter(function(x){ return x.branchId===bid; }),
+    contacts:  db.contacts.filter(function(x){ return x.branchId===bid; })
+  };
+}
+
+function totals(){
+  var d = branchData(), b = currentBranch() || { cashOpening:0 };
+  var salesTotal = sum(d.sales,'total');
+  var salesPaid  = sum(d.sales,'paid');
+  var purTotal   = sum(d.purchases,'total');
+  var purPaid    = sum(d.purchases,'paid');
+  var exp        = sum(d.expenses,'amount');
+  var inPay      = sum(d.payments.filter(function(p){ return p.direction==='in'; }),'amount');
+  var outPay     = sum(d.payments.filter(function(p){ return p.direction==='out'; }),'amount');
+  var cash = num(b.cashOpening) + salesPaid + inPay - purPaid - outPay - exp;
+  return { salesTotal:salesTotal, salesPaid:salesPaid, purTotal:purTotal, purPaid:purPaid, exp:exp, inPay:inPay, outPay:outPay, cash:cash };
+}
+
+function contactStats(c){
+  var d = branchData();
+  if(c.type === 'customer'){
+    var inv  = d.sales.filter(function(s){ return s.customerId===c.id; });
+    var total = sum(inv,'total');
+    var paidUpfront = sum(inv,'paid');
+    var later = sum(d.payments.filter(function(p){ return p.partyId===c.id && p.direction==='in'; }),'amount');
+    return { total:total, paid: paidUpfront + later, balance: total - paidUpfront - later };
+  }
+  var inv2 = d.purchases.filter(function(s){ return s.supplierId===c.id; });
+  var total2 = sum(inv2,'total');
+  var paidUpfront2 = sum(inv2,'paid');
+  var later2 = sum(d.payments.filter(function(p){ return p.partyId===c.id && p.direction==='out'; }),'amount');
+  return { total:total2, paid: paidUpfront2 + later2, balance: total2 - paidUpfront2 - later2 };
+}
+
+function debtTotals(){
+  var d = branchData(), cd = 0, sd = 0;
+  d.contacts.forEach(function(c){
+    var bal = contactStats(c).balance;
+    if(c.type==='customer' && bal > 0) cd += bal;
+    if(c.type==='supplier' && bal > 0) sd += bal;
+  });
+  return { customerDebt: cd, supplierDebt: sd };
+}
+
+function recentOps(n){
+  var d = branchData(), ops = [];
+  d.sales.forEach(function(s){ ops.push({ date:s.date, type:'بيع', cls:'blue', desc:s.customerName || 'عميل نقدي', amount:num(s.total) }); });
+  d.purchases.forEach(function(s){ ops.push({ date:s.date, type:'شراء', cls:'purple', desc:s.supplierName || 'مورد', amount:num(s.total) }); });
+  d.expenses.forEach(function(s){ ops.push({ date:s.date, type:'مصروف', cls:'red', desc:s.category || 'مصروف', amount:num(s.amount) }); });
+  d.payments.forEach(function(s){ ops.push({ date:s.date, type:(s.direction==='in'?'قبض':'صرف'), cls:(s.direction==='in'?'green':'orange'), desc:s.partyName || 'دفعة', amount:num(s.amount) }); });
+  return ops.sort(function(a,b){ return b.date.localeCompare(a.date); }).slice(0, n);
+}
+
+function groupKey(dateStr, period){
+  if(period === 'month') return dateStr.slice(0,7);
+  if(period === 'week'){
+    var d = new Date(dateStr + 'T00:00:00');
+    var diff = (d.getDay() + 1) % 7;
+    d.setDate(d.getDate() - diff);
+    return isoLocal(d);
+  }
+  return dateStr;
+}
+function groupLabel(key, period){
+  if(period === 'month') return 'شهر ' + key;
+  if(period === 'week')  return 'أسبوع ' + key;
+  return key;
+}
+function buildReport(period, from, to){
+  var d = branchData(), rows = {};
+  function ok(dt){ return (!from || dt >= from) && (!to || dt <= to); }
+  function touch(dt){
+    var k = groupKey(dt, period);
+    if(!rows[k]) rows[k] = { key:k, sales:0, purchases:0, expenses:0, cashIn:0, cashOut:0 };
+    return rows[k];
+  }
+  d.sales.forEach(function(x){ if(!ok(x.date)) return; var r = touch(x.date); r.sales += num(x.total); r.cashIn += num(x.paid); });
+  d.purchases.forEach(function(x){ if(!ok(x.date)) return; var r = touch(x.date); r.purchases += num(x.total); r.cashOut += num(x.paid); });
+  d.expenses.forEach(function(x){ if(!ok(x.date)) return; var r = touch(x.date); r.expenses += num(x.amount); r.cashOut += num(x.amount); });
+  d.payments.forEach(function(x){ if(!ok(x.date)) return; var r = touch(x.date); if(x.direction==='in') r.cashIn += num(x.amount); else r.cashOut += num(x.amount); });
+  return Object.keys(rows).map(function(k){ return rows[k]; }).sort(function(a,b){ return a.key.localeCompare(b.key); });
+}
+
+function render(){
+  if(session.companyId && !db.companies.some(function(c){ return c.id===session.companyId; })) resetSession();
+  if(session.branchId){
+    var c = currentCompany();
+    if(!c || !c.branches.some(function(b){ return b.id===session.branchId; })){ session.branchId=null; session.userId=null; saveSession(); }
+  }
+  if(session.userId && !db.users.some(function(u){ return u.id===session.userId; })){ session.userId=null; saveSession(); }
+
+  if(!session.companyId) return viewCompanyLogin();
+  if(!session.branchId)  return viewBranchSelect();
+  if(!session.userId)    return viewUserAuth();
+  return viewApp();
+}
+
+function viewCompanyLogin(){
+  root.innerHTML =
+    '<div class="auth-wrap"><div class="auth-card">' +
+      '<h1>📊 نظام حسابات الشركة</h1>' +
+      '<p class="muted small" style="margin-top:-6px">الدخول على حساب الشركة أولاً</p>' +
+      '<form id="form-company-login" class="stack">' +
+        '<label>رمز الشركة<input id="c-code" placeholder="مثال: DEMO" autocomplete="off" required></label>' +
+        '<label>كلمة مرور الشركة<input id="c-pass" type="password" placeholder="••••" required></label>' +
+        '<button class="btn primary" type="submit">دخول الشركة</button>' +
+      '</form>' +
+      '<div id="msg" class="msg"></div>' +
+      '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إنشاء شركة جديدة</summary>' +
+        '<form id="form-company-new" class="stack mt">' +
+          '<label>اسم الشركة<input id="n-name" required></label>' +
+          '<label>رمز الشركة (للدخول)<input id="n-code" placeholder="مثال: ABC" required></label>' +
+          '<label>كلمة المرور<input id="n-pass" type="password" required></label>' +
+          '<label>العملة<input id="n-cur" value="ر.س"></label>' +
+          '<button class="btn" type="submit">إنشاء الشركة</button>' +
+        '</form>' +
+      '</details>' +
+      '<p class="hint">تجربة سريعة: رمز الشركة <b>DEMO</b> — كلمة المرور <b>1234</b></p>' +
+    '</div></div>';
+
+  $('#form-company-login').onsubmit = function(e){
+    e.preventDefault();
+    var code = $('#c-code').value.trim().toUpperCase();
+    var pass = $('#c-pass').value;
+    var c = db.companies.find(function(x){ return x.code.toUpperCase() === code; });
+    if(!c || c.password !== pass) return flash('رمز الشركة أو كلمة المرور غير صحيحة');
+    session = { companyId:c.id, branchId:null, userId:null }; saveSession(); render();
+  };
+
+  $('#form-company-new').onsubmit = function(e){
+    e.preventDefault();
+    var name = $('#n-name').value.trim();
+    var code = $('#n-code').value.trim().toUpperCase();
+    var pass = $('#n-pass').value;
+    var cur  = $('#n-cur').value.trim() || 'ر.س';
+    if(!name || !code || !pass) return flash('أكمل جميع الحقول');
+    if(db.companies.some(function(c){ return c.code.toUpperCase() === code; })) return flash('رمز الشركة مستخدم مسبقًا');
+    db.companies.push({
+      id: uid(), name:name, code:code, password:pass, currency:cur,
+      branches: [{ id: uid(), name:'الفرع الرئيسي', code:'01', cashOpening:0 }]
+    });
+    saveDB();
+    flash('تم إنشاء الشركة — يمكنك الدخول الآن', 'ok');
+    $('#c-code').value = code;
+  };
+}
+
+function viewBranchSelect(){
+  var c = currentCompany();
+  var cards = c.branches.map(function(b){
+    return '<button class="branch-card" data-branch="'+b.id+'">' +
+      '<span class="branch-icon">🏢</span>' +
+      '<span class="branch-name">'+esc(b.name)+'</span>' +
+      '<span class="muted small">رمز: '+esc(b.code)+'</span></button>';
+  }).join('');
+
+  root.innerHTML =
+    '<div class="auth-wrap"><div class="auth-card wide">' +
+      '<div class="topbar"><div>' +
+        '<div style="font-weight:900;font-size:17px">'+esc(c.name)+'</div>' +
+        '<div class="muted small">اختر الفرع للمتابعة</div>' +
+      '</div><button class="btn ghost sm" id="btn-back-company">تغيير الشركة</button></div>' +
+      '<div class="branch-grid">'+cards+'</div>' +
+      '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إضافة فرع جديد</summary>' +
+        '<form id="form-branch-new" class="row mt">' +
+          '<input id="b-name" placeholder="اسم الفرع" required style="flex:2;min-width:160px">' +
+          '<input id="b-code" placeholder="رمز الفرع" required style="flex:1;min-width:100px">' +
+          '<button class="btn" type="submit">إضافة</button>' +
+        '</form>' +
+      '</details>' +
+      '<div id="msg" class="msg"></div>' +
+    '</div></div>';
+
+  root.querySelectorAll('[data-branch]').forEach(function(btn){
+    btn.onclick = function(){ session.branchId = btn.dataset.branch; session.userId = null; saveSession(); render(); };
+  });
+
+  $('#btn-back-company').onclick = function(){ session = { companyId:null, branchId:null, userId:null }; saveSession(); render(); };
+
+  $('#form-branch-new').onsubmit = function(e){
+    e.preventDefault();
+    var name = $('#b-name').value.trim();
+    var code = $('#b-code').value.trim();
+    if(!name || !code) return flash('أدخل اسم ورمز الفرع');
+    if(c.branches.some(function(b){ return b.code === code; })) return flash('رمز الفرع مستخدم');
+    c.branches.push({ id: uid(), name:name, code:code, cashOpening:0 });
+    saveDB(); toast('تم إضافة الفرع'); render();
+  };
+}
+
+function viewUserAuth(){
+  var c = currentCompany(), b = currentBranch();
+  var isDemo = c.id === 'comp_demo';
+  var demoHint = isDemo ? '<p class="hint">تجربة: اسم المستخدم <b>admin</b> — كلمة المرور <b>1234</b></p>' : '';
+
+  root.innerHTML =
+    '<div class="auth-wrap"><div class="auth-card">' +
+      '<div class="topbar"><div>' +
+        '<div style="font-weight:900">'+esc(c.name)+'</div>' +
+        '<div class="muted small">'+esc(b.name)+'</div>' +
+      '</div><button class="btn ghost sm" id="btn-back-branch">تغيير الفرع</button></div>' +
+      '<div class="tabs">' +
+        '<button class="tab active" data-mode="login">دخول</button>' +
+        '<button class="tab" data-mode="register">حساب جديد</button>' +
+      '</div>' +
+      '<form id="form-user-login" class="stack">' +
+        '<label>اسم المستخدم<input id="u-user" autocomplete="off" required></label>' +
+        '<label>كلمة المرور<input id="u-pass" type="password" required></label>' +
+        '<button class="btn primary" type="submit">دخول</button>' +
+      '</form>' +
+      '<form id="form-user-register" class="stack hidden">' +
+        '<label>الاسم الكامل<input id="r-name" required></label>' +
+        '<label>اسم المستخدم<input id="r-user" autocomplete="off" required></label>' +
+        '<label>كلمة المرور<input id="r-pass" type="password" required></label>' +
+        '<label>الدور<select id="r-role"><option>مدير</option><option>محاسب</option><option>كاشير</option></select></label>' +
+        '<button class="btn" type="submit">إنشاء الحساب</button>' +
+      '</form>' +
+      '<div id="msg" class="msg"></div>' +
+      demoHint +
+    '</div></div>';
+
+  root.querySelectorAll('[data-mode]').forEach(function(t){
+    t.onclick = function(){
+      root.querySelectorAll('[data-mode]').forEach(function(x){ x.classList.toggle('active', x === t); });
+      var login = t.dataset.mode === 'login';
+      $('#form-user-login').classList.toggle('hidden', !login);
+      $('#form-user-register').classList.toggle('hidden', login);
+      flash('');
+    };
+  });
+
+  $('#btn-back-branch').onclick = function(){ session.branchId = null; session.userId = null; saveSession(); render(); };
+
+  $('#form-user-login').onsubmit = function(e){
+    e.preventDefault();
+    var username = $('#u-user').value.trim();
+    var pass = $('#u-pass').value;
+    var u = db.users.find(function(x){ return x.branchId === session.branchId && x.username.toLowerCase() === username.toLowerCase(); });
+    if(!u || u.password !== pass) return flash('اسم المستخدم أو كلمة المرور غير صحيحة');
+    session.userId = u.id; saveSession(); render();
+  };
+
+  $('#form-user-register').onsubmit = function(e){
+    e.preventDefault();
+    var name = $('#r-name').value.trim();
+    var username = $('#r-user').value.trim();
+    var pass = $('#r-pass').value;
+    var role = $('#r-role').value;
+    if(!name || !username || !pass) return flash('أكمل جميع الحقول');
+    var exists = db.users.some(function(u){ return u.branchId === session.branchId && u.username.toLowerCase() === username.toLowerCase(); });
+    if(exists) return flash('اسم المستخدم مستخدم في هذا الفرع');
+    var u = { id: uid(), companyId: session.companyId, branchId: session.branchId, name:name, username:username, password:pass, role:role };
+    db.users.push(u); saveDB();
+    session.userId = u.id; saveSession(); render();
+  };
+}
+
+var TABS = [
+  ['dashboard','لوحة التحكم'],
+  ['sales','المبيعات'],
+  ['purchases','المشتريات'],
+  ['expenses','المصروفات'],
+  ['payments','الدفعات'],
+  ['debts','الديون'],
+  ['contacts','العملاء والموردون'],
+  ['reports','التقارير']
+];
+
+function viewApp(){
+  var c = currentCompany(), b = currentBranch(), u = currentUser();
+  var tabsHtml = TABS.map(function(t){ return '<button class="tab '+(ui.tab===t[0]?'active':'')+'" data-tab="'+t[0]+'">'+t[1]+'</button>'; }).join('');
+
+  root.innerHTML =
+    '<header class="app-header">' +
+      '<div class="brand">📊 نظام الحسابات</div>' +
+      '<div class="ctx">' +
+        '<span class="chip">'+esc(c.name)+'</span>' +
+        '<span class="chip strong">'+esc(b.name)+'</span>' +
+        '<span class="chip user">'+esc(u.name)+' · '+esc(u.role)+'</span>' +
+      '</div>' +
+      '<button class="btn ghost sm" id="btn-logout">خروج</button>' +
+    '</header>' +
+    '<nav class="app-tabs">'+tabsHtml+'</nav>' +
+    '<main id="view" class="view"></main>';
+
+  $('#btn-logout').onclick = function(){ resetSession(); render(); };
+  root.querySelectorAll('[data-tab]').forEach(function(btn){
+    btn.onclick = function(){ ui.tab = btn.dataset.tab; viewApp(); };
+  });
+  renderView();
+}
+
+function renderView(){
+  var v = $('#view');
+  var views = {
+    dashboard: viewDashboard, sales: viewSales, purchases: viewPurchases,
+    expenses: viewExpenses, payments: viewPayments, debts: viewDebts,
+    contacts: viewContacts, reports: viewReports
+  };
+  (views[ui.tab] || viewDashboard)(v);
+}
+
+function viewDashboard(v){
+  var t = totals(), dt = debtTotals(), b = currentBranch();
+  var recent = recentOps(8);
+  var recentHtml;
+  if(recent.length){
+    recentHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th>البيان</th><th class="num">المبلغ</th></tr></thead><tbody>' +
+      recent.map(function(r){
+        return '<tr><td>'+r.date+'</td><td><span class="badge '+r.cls+'">'+r.type+'</span></td><td>'+esc(r.desc)+'</td><td class="num">'+money(r.amount)+'</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  } else {
+    recentHtml = '<p class="muted">لا توجد عمليات بعد. ابدأ من تبويب المبيعات.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="grid cards">' +
+      stat('رصيد الخزينة', money(t.cash), 'primary') +
+      stat('إجمالي المبيعات', money(t.salesTotal)) +
+      stat('إجمالي المشتريات', money(t.purTotal)) +
+      stat('المصروفات', money(t.exp)) +
+      stat('ديون العملاء', money(dt.customerDebt), 'warn') +
+      stat('ديون الموردين', money(dt.supplierDebt), 'warn') +
+    '</div>' +
+    '<div class="grid two">' +
+      '<div class="card"><h3>الرصيد الافتتاحي للخزينة</h3>' +
+        '<form id="form-opening" class="row">' +
+          '<input type="number" step="0.01" id="opening" value="'+num(b.cashOpening)+'" style="flex:1">' +
+          '<button class="btn primary">حفظ</button>' +
+        '</form>' +
+        '<p class="muted small mt">الرصيد الحالي = الرصيد الافتتاحي + المقبوضات − المدفوعات − المصروفات</p>' +
+      '</div>' +
+      '<div class="card"><h3>آخر العمليات</h3>' + recentHtml + '</div>' +
+    '</div>';
+
+  $('#form-opening').onsubmit = function(e){
+    e.preventDefault();
+    b.cashOpening = num($('#opening').value);
+    saveDB(); toast('تم حفظ الرصيد الافتتاحي'); viewDashboard(v);
+  };
+}
+
+function viewSales(v){
+  var d = branchData();
+  var customers = d.contacts.filter(function(c){ return c.type === 'customer'; });
+  var rows = d.sales.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  var custOptions = customers.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+  var rowsHtml;
+  if(rows.length){
+    rowsHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th class="num">المتبقي</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
+      rows.map(function(s){
+        return '<tr><td>'+s.date+'</td><td>'+esc(s.customerName || 'عميل نقدي')+'</td>' +
+          '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td>' +
+          '<td class="num">'+money(num(s.total) - num(s.paid))+'</td><td>'+esc(s.note || '')+'</td>' +
+          '<td><button class="btn danger sm" data-del="sales" data-id="'+s.id+'">حذف</button></td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td colspan="2">الإجمالي</td>' +
+        '<td class="num">'+money(sum(rows,'total'))+'</td><td class="num">'+money(sum(rows,'paid'))+'</td>' +
+        '<td class="num">'+money(sum(rows,'total') - sum(rows,'paid'))+'</td><td colspan="2"></td></tr></tfoot></table></div>';
+  } else {
+    rowsHtml = '<p class="muted">لا توجد فواتير بيع.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="card"><h3>إضافة فاتورة بيع</h3>' +
+      '<form id="f-sale" class="form-grid">' +
+        '<label>التاريخ<input type="date" id="s-date" value="'+today()+'" required></label>' +
+        '<label>العميل<select id="s-customer"><option value="">عميل نقدي</option>'+custOptions+'</select></label>' +
+        '<label>الإجمالي<input type="number" step="0.01" min="0" id="s-total" required></label>' +
+        '<label>المدفوع<input type="number" step="0.01" min="0" id="s-paid"></label>' +
+        '<label class="span2">ملاحظة<input id="s-note" placeholder="اختياري"></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة الفاتورة</button></div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="card"><h3>فواتير البيع ('+rows.length+')</h3>' + rowsHtml + '</div>';
+
+  var custSel = $('#s-customer'), totalIn = $('#s-total'), paidIn = $('#s-paid');
+  function syncPaid(){
+    if(!custSel.value){ paidIn.value = totalIn.value || ''; paidIn.disabled = true; }
+    else paidIn.disabled = false;
+  }
+  custSel.onchange = syncPaid; totalIn.oninput = syncPaid; syncPaid();
+
+  $('#f-sale').onsubmit = function(e){
+    e.preventDefault();
+    var total = num(totalIn.value);
+    var customerId = custSel.value;
+    var paid = customerId ? num(paidIn.value) : total;
+    if(total <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
+    if(paid > total) return toast('المدفوع أكبر من الإجمالي', 'err');
+    var c = customers.find(function(x){ return x.id === customerId; });
+    db.sales.push({
+      id: uid(), branchId: session.branchId, date: $('#s-date').value,
+      customerId: customerId || null,
+      customerName: c ? c.name : 'عميل نقدي',
+      total: total, paid: paid, note: $('#s-note').value.trim()
+    });
+    saveDB(); toast('تم إضافة فاتورة البيع'); viewSales(v);
+  };
+
+  bindDeletes(v);
+}
+
+function viewPurchases(v){
+  var d = branchData();
+  var suppliers = d.contacts.filter(function(c){ return c.type === 'supplier'; });
+  var rows = d.purchases.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  var supOptions = suppliers.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+  var rowsHtml;
+  if(rows.length){
+    rowsHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>المورد</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th class="num">المتبقي</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
+      rows.map(function(s){
+        return '<tr><td>'+s.date+'</td><td>'+esc(s.supplierName || 'مورد نقدي')+'</td>' +
+          '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td>' +
+          '<td class="num">'+money(num(s.total) - num(s.paid))+'</td><td>'+esc(s.note || '')+'</td>' +
+          '<td><button class="btn danger sm" data-del="purchases" data-id="'+s.id+'">حذف</button></td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td colspan="2">الإجمالي</td>' +
+        '<td class="num">'+money(sum(rows,'total'))+'</td><td class="num">'+money(sum(rows,'paid'))+'</td>' +
+        '<td class="num">'+money(sum(rows,'total') - sum(rows,'paid'))+'</td><td colspan="2"></td></tr></tfoot></table></div>';
+  } else {
+    rowsHtml = '<p class="muted">لا توجد فواتير شراء.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="card"><h3>إضافة فاتورة شراء</h3>' +
+      '<form id="f-pur" class="form-grid">' +
+        '<label>التاريخ<input type="date" id="p-date" value="'+today()+'" required></label>' +
+        '<label>المورد<select id="p-supplier"><option value="">مورد نقدي</option>'+supOptions+'</select></label>' +
+        '<label>الإجمالي<input type="number" step="0.01" min="0" id="p-total" required></label>' +
+        '<label>المدفوع<input type="number" step="0.01" min="0" id="p-paid"></label>' +
+        '<label class="span2">ملاحظة<input id="p-note" placeholder="اختياري"></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة الفاتورة</button></div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="card"><h3>فواتير الشراء ('+rows.length+')</h3>' + rowsHtml + '</div>';
+
+  var supSel = $('#p-supplier'), totalIn = $('#p-total'), paidIn = $('#p-paid');
+  function syncPaid(){
+    if(!supSel.value){ paidIn.value = totalIn.value || ''; paidIn.disabled = true; }
+    else paidIn.disabled = false;
+  }
+  supSel.onchange = syncPaid; totalIn.oninput = syncPaid; syncPaid();
+
+  $('#f-pur').onsubmit = function(e){
+    e.preventDefault();
+    var total = num(totalIn.value);
+    var supplierId = supSel.value;
+    var paid = supplierId ? num(paidIn.value) : total;
+    if(total <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
+    if(paid > total) return toast('المدفوع أكبر من الإجمالي', 'err');
+    var s = suppliers.find(function(x){ return x.id === supplierId; });
+    db.purchases.push({
+      id: uid(), branchId: session.branchId, date: $('#p-date').value,
+      supplierId: supplierId || null,
+      supplierName: s ? s.name : 'مورد نقدي',
+      total: total, paid: paid, note: $('#p-note').value.trim()
+    });
+    saveDB(); toast('تم إضافة فاتورة الشراء'); viewPurchases(v);
+  };
+
+  bindDeletes(v);
+}
+
+function viewExpenses(v){
+  var d = branchData();
+  var rows = d.expenses.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var rowsHtml;
+  if(rows.length){
+    rowsHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th class="num">المبلغ</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
+      rows.map(function(x){
+        return '<tr><td>'+x.date+'</td><td>'+esc(x.category)+'</td>' +
+          '<td class="num">'+money(x.amount)+'</td><td>'+esc(x.note || '')+'</td>' +
+          '<td><button class="btn danger sm" data-del="expenses" data-id="'+x.id+'">حذف</button></td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td colspan="2">الإجمالي</td><td class="num">'+money(sum(rows,'amount'))+'</td><td colspan="2"></td></tr></tfoot></table></div>';
+  } else {
+    rowsHtml = '<p class="muted">لا توجد مصروفات.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="card"><h3>إضافة مصروف</h3>' +
+      '<form id="f-exp" class="form-grid">' +
+        '<label>التاريخ<input type="date" id="e-date" value="'+today()+'" required></label>' +
+        '<label>نوع المصروف<input id="e-cat" list="exp-cats" placeholder="مثال: إيجار" required>' +
+          '<datalist id="exp-cats"><option>إيجار</option><option>رواتب</option><option>كهرباء وماء</option><option>مواصلات</option><option>صيانة</option><option>مستلزمات</option><option>أخرى</option></datalist></label>' +
+        '<label>المبلغ<input type="number" step="0.01" min="0" id="e-amount" required></label>' +
+        '<label class="span2">ملاحظة<input id="e-note" placeholder="اختياري"></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة المصروف</button></div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="card"><h3>المصروفات ('+rows.length+')</h3>' + rowsHtml + '</div>';
+
+  $('#f-exp').onsubmit = function(e){
+    e.preventDefault();
+    var amount = num($('#e-amount').value);
+    if(amount <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
+    db.expenses.push({
+      id: uid(), branchId: session.branchId, date: $('#e-date').value,
+      category: $('#e-cat').value.trim(), amount: amount, note: $('#e-note').value.trim()
+    });
+    saveDB(); toast('تم إضافة المصروف'); viewExpenses(v);
+  };
+
+  bindDeletes(v);
+}
+
+function viewPayments(v){
+  var d = branchData();
+  var rows = d.payments.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var rowsHtml;
+  if(rows.length){
+    rowsHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th>الطرف</th><th class="num">المبلغ</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
+      rows.map(function(x){
+        return '<tr><td>'+x.date+'</td>' +
+          '<td><span class="badge '+(x.direction==='in'?'green':'orange')+'">'+(x.direction==='in'?'قبض':'صرف')+'</span></td>' +
+          '<td>'+esc(x.partyName || '—')+'</td><td class="num">'+money(x.amount)+'</td>' +
+          '<td>'+esc(x.note || '')+'</td>' +
+          '<td><button class="btn danger sm" data-del="payments" data-id="'+x.id+'">حذف</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  } else {
+    rowsHtml = '<p class="muted">لا توجد دفعات.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="card"><h3>إضافة دفعة</h3>' +
+      '<form id="f-pay" class="form-grid">' +
+        '<label>التاريخ<input type="date" id="p-date" value="'+today()+'" required></label>' +
+        '<label>النوع<select id="p-type"><option value="in">قبض من عميل</option><option value="out">صرف لمورد</option></select></label>' +
+        '<label>الطرف<select id="p-party"></select></label>' +
+        '<label>المبلغ<input type="number" step="0.01" min="0" id="p-amount" required></label>' +
+        '<label class="span2">ملاحظة<input id="p-note" placeholder="اختياري"></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة الدفعة</button></div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="card"><h3>الدفعات ('+rows.length+')</h3>' + rowsHtml + '</div>';
+
+  var typeSel = $('#p-type'), partySel = $('#p-party');
+  function fillParties(){
+    var list = d.contacts.filter(function(c){ return c.type === (typeSel.value === 'in' ? 'customer' : 'supplier'); });
+    partySel.innerHTML = list.length
+      ? list.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('')
+      : '<option value="">— لا يوجد —</option>';
+  }
+  typeSel.onchange = fillParties; fillParties();
+
+  $('#f-pay').onsubmit = function(e){
+    e.preventDefault();
+    var amount = num($('#p-amount').value);
+    var partyId = partySel.value;
+    if(amount <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
+    if(!partyId) return toast('أضف العميل/المورد أولًا من تبويب العملاء والموردين', 'err');
+    var party = d.contacts.find(function(c){ return c.id === partyId; });
+    db.payments.push({
+      id: uid(), branchId: session.branchId, date: $('#p-date').value,
+      direction: typeSel.value, partyType: typeSel.value === 'in' ? 'customer' : 'supplier',
+      partyId: partyId, partyName: party ? party.name : '', amount: amount, note: $('#p-note').value.trim()
+    });
+    saveDB(); toast('تم إضافة الدفعة'); viewPayments(v);
+  };
+
+  bindDeletes(v);
+}
+
+function viewDebts(v){
+  var d = branchData();
+  var customers = d.contacts.filter(function(c){ return c.type === 'customer'; }).map(function(c){ return { c:c, s:contactStats(c) }; }).filter(function(x){ return x.s.balance !== 0; });
+  var suppliers = d.contacts.filter(function(c){ return c.type === 'supplier'; }).map(function(c){ return { c:c, s:contactStats(c) }; }).filter(function(x){ return x.s.balance !== 0; });
+  var cTotal = customers.reduce(function(a,x){ return a + Math.max(0, x.s.balance); }, 0);
+  var sTotal = suppliers.reduce(function(a,x){ return a + Math.max(0, x.s.balance); }, 0);
+
+  function tbl(list, label){
+    if(!list.length) return '<p class="muted">لا توجد ديون على '+label+'.</p>';
+    return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>الاسم</th><th class="num">إجمالي التعامل</th><th class="num">المدفوع</th><th class="num">المتبقي</th></tr></thead><tbody>' +
+      list.map(function(x){
+        return '<tr><td>'+esc(x.c.name)+'</td><td class="num">'+money(x.s.total)+'</td>' +
+          '<td class="num">'+money(x.s.paid)+'</td>' +
+          '<td class="num" style="font-weight:900;color:'+(x.s.balance>0?'var(--warn)':'var(--ok)')+'">'+money(x.s.balance)+'</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  v.innerHTML =
+    '<div class="grid cards">' +
+      stat('إجمالي ديون العملاء', money(cTotal), 'warn') +
+      stat('إجمالي ديون الموردين', money(sTotal), 'warn') +
+      stat('صافي المديونية', money(cTotal - sTotal), 'primary') +
+    '</div>' +
+    '<div class="card"><h3>ديون العملاء (لنا)</h3>'+tbl(customers, 'العملاء')+'</div>' +
+    '<div class="card"><h3>ديون الموردين (علينا)</h3>'+tbl(suppliers, 'الموردين')+'</div>';
+}
+
+function viewContacts(v){
+  var d = branchData();
+  var rows = d.contacts;
+  var rowsHtml;
+  if(rows.length){
+    rowsHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>الاسم</th><th>النوع</th><th>الهاتف</th><th class="num">الرصيد</th><th></th></tr></thead><tbody>' +
+      rows.map(function(c){
+        var s = contactStats(c);
+        return '<tr><td>'+esc(c.name)+'</td>' +
+          '<td><span class="badge '+(c.type==='customer'?'blue':'purple')+'">'+(c.type==='customer'?'عميل':'مورد')+'</span></td>' +
+          '<td>'+esc(c.phone || '—')+'</td>' +
+          '<td class="num" style="color:'+(s.balance>0?'var(--warn)':'var(--ok)')+'">'+money(s.balance)+'</td>' +
+          '<td><button class="btn danger sm" data-del="contacts" data-id="'+c.id+'">حذف</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  } else {
+    rowsHtml = '<p class="muted">لا يوجد عملاء أو موردون بعد.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="card"><h3>إضافة عميل / مورد</h3>' +
+      '<form id="f-contact" class="form-grid">' +
+        '<label>النوع<select id="c-type"><option value="customer">عميل</option><option value="supplier">مورد</option></select></label>' +
+        '<label>الاسم<input id="c-name" required></label>' +
+        '<label>الهاتف<input id="c-phone" placeholder="اختياري"></label>' +
+        '<div><button class="btn primary" type="submit">إضافة</button></div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="card"><h3>القائمة ('+rows.length+')</h3>' + rowsHtml + '</div>';
+
+  $('#f-contact').onsubmit = function(e){
+    e.preventDefault();
+    var name = $('#c-name').value.trim();
+    if(!name) return toast('أدخل الاسم', 'err');
+    db.contacts.push({
+      id: uid(), companyId: session.companyId, branchId: session.branchId,
+      type: $('#c-type').value, name: name, phone: $('#c-phone').value.trim()
+    });
+    saveDB(); toast('تمت الإضافة'); viewContacts(v);
+  };
+
+  bindDeletes(v);
+}
+
+function viewReports(v){
+  var period = ui.reportPeriod;
+  var rows = buildReport(period, ui.reportFrom, ui.reportTo);
+  var t = rows.reduce(function(a,r){
+    return { sales:a.sales+r.sales, purchases:a.purchases+r.purchases, expenses:a.expenses+r.expenses,
+             cashIn:a.cashIn+r.cashIn, cashOut:a.cashOut+r.cashOut };
+  }, { sales:0, purchases:0, expenses:0, cashIn:0, cashOut:0 });
+
+  var rowsHtml;
+  if(rows.length){
+    rowsHtml = '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<th>الفترة</th><th class="num">المبيعات</th><th class="num">المشتريات</th>' +
+      '<th class="num">المصروفات</th><th class="num">المقبوضات</th><th class="num">المدفوعات</th><th class="num">صافي النقد</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(function(r){
+        var net = r.cashIn - r.cashOut;
+        return '<tr><td>'+groupLabel(r.key, period)+'</td>' +
+          '<td class="num">'+money(r.sales)+'</td><td class="num">'+money(r.purchases)+'</td>' +
+          '<td class="num">'+money(r.expenses)+'</td><td class="num">'+money(r.cashIn)+'</td>' +
+          '<td class="num">'+money(r.cashOut)+'</td>' +
+          '<td class="num" style="font-weight:900;color:'+(net>=0?'var(--ok)':'var(--danger)')+'">'+money(net)+'</td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td>الإجمالي</td>' +
+        '<td class="num">'+money(t.sales)+'</td><td class="num">'+money(t.purchases)+'</td>' +
+        '<td class="num">'+money(t.expenses)+'</td><td class="num">'+money(t.cashIn)+'</td>' +
+        '<td class="num">'+money(t.cashOut)+'</td><td class="num">'+money(t.cashIn - t.cashOut)+'</td></tr></tfoot></table></div>';
+  } else {
+    rowsHtml = '<p class="muted">لا توجد بيانات في هذه الفترة.</p>';
+  }
+
+  v.innerHTML =
+    '<div class="card"><h3>التقارير الدورية</h3>' +
+      '<div class="form-grid">' +
+        '<label>نوع التقرير<select id="r-period">' +
+          '<option value="day" '+(period==='day'?'selected':'')+'>يومي</option>' +
+          '<option value="week" '+(period==='week'?'selected':'')+'>أسبوعي</option>' +
+          '<option value="month" '+(period==='month'?'selected':'')+'>شهري</option>' +
+        '</select></label>' +
+        '<label>من تاريخ<input type="date" id="r-from" value="'+(ui.reportFrom||'')+'"></label>' +
+        '<label>إلى تاريخ<input type="date" id="r-to" value="'+(ui.reportTo||'')+'"></label>' +
+        '<div class="row" style="gap:8px">' +
+          '<button class="btn primary" id="r-apply">تحديث</button>' +
+          '<button class="btn" id="r-print">طباعة</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="grid cards">' +
+      stat('المبيعات', money(t.sales)) +
+      stat('المشتريات', money(t.purchases)) +
+      stat('المصروفات', money(t.expenses)) +
+      stat('المقبوضات النقدية', money(t.cashIn), 'ok') +
+      stat('المدفوعات النقدية', money(t.cashOut), 'warn') +
+      stat('صافي الحركة النقدية', money(t.cashIn - t.cashOut), 'primary') +
+    '</div>' +
+    '<div class="card"><h3>تفصيل الفترات</h3>' + rowsHtml + '</div>';
+
+  $('#r-apply').onclick = function(){
+    ui.reportPeriod = $('#r-period').value;
+    ui.reportFrom = $('#r-from').value;
+    ui.reportTo = $('#r-to').value;
+    viewReports(v);
+  };
+  $('#r-print').onclick = function(){ window.print(); };
+}
+
+function bindDeletes(v){
+  v.querySelectorAll('[data-del]').forEach(function(btn){
+    btn.onclick = function(){
+      if(!confirm('تأكيد الحذف؟')) return;
+      var col = btn.dataset.del, id = btn.dataset.id;
+      db[col] = db[col].filter(function(x){ return x.id !== id; });
+      saveDB(); toast('تم الحذف'); renderView();
+    };
+  });
+}
+
+render();
+
+} catch(err) {
+  showError((err && err.stack) || (err && err.message) || String(err));
+}
+
+})();
+</script>
+</body>
+</html>
