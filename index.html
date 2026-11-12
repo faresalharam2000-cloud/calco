@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>نظام حسابات الشركة - تقارير متقدمة</title>
+<title>نظام حسابات الشركة - إصدار متقدم</title>
 <style>
 :root{--bg:#f4f6fb;--card:#fff;--ink:#1b2430;--muted:#6b7688;--line:#e3e8f0;--primary:#1f6feb;--primary-d:#1558c4;--ok:#0f9d58;--warn:#e8a33d;--danger:#e5484d;--radius:14px}
 *{box-sizing:border-box}
@@ -114,7 +114,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   <pre id="error-msg"></pre>
   <div style="margin-top:20px">
     <button onclick="location.reload()">إعادة تحميل</button>
-    <button onclick="try{localStorage.removeItem('accsys_v3');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
+    <button onclick="try{localStorage.removeItem('accsys_v4');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
   </div>
 </div>
 
@@ -132,7 +132,7 @@ function showError(msg){
 window.addEventListener('error', function(e){ showError((e.message||'') + '\n' + ((e.error && e.error.stack) || '')); });
 
 try {
-var KEY = 'accsys_v3'; // تم تحديث الإصدار لإضافة التقارير
+var KEY = 'accsys_v4'; // تحديث الإصدار
 var SKEY = 'accsys_session';
 var db = loadDB();
 var session = loadSession();
@@ -365,6 +365,7 @@ function viewDashboard(v){
       '<form id="form-opening" class="form-grid">' +
         '<label>الرصيد النقدي الافتتاحي<input type="number" step="0.01" id="opening-cash" value="'+num(b.cashOpening)+'"></label>' +
         '<label>رصيد البنك الافتتاحي<input type="number" step="0.01" id="opening-bank" value="'+num(b.bankOpening)+'"></label>' +
+        '<label class="span2">ملاحظة التعديل<input id="op-note" placeholder="سبب تعديل الرصيد..."></label>' +
         '<div class="span2"><button class="btn primary" type="submit">حفظ الأرصدة</button></div>' +
       '</form>' +
     '</div>';
@@ -376,7 +377,8 @@ function viewDashboard(v){
     b.bankOpening = num($('#opening-bank').value);
     saveDB();
     var newT = totals();
-    logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية', oldT.cash, newT.cash, oldT.bank, newT.bank);
+    var note = $('#op-note').value.trim();
+    logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية' + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تم الحفظ'); viewDashboard(v);
   };
 }
@@ -386,10 +388,11 @@ function viewSales(v){
   var rows = d.sales.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   var custOptions = customers.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
   
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>طريقة الدفع</th><th></th></tr></thead><tbody>' +
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>الطريقة</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
       rows.map(function(s){
         return '<tr><td>'+s.date+'</td><td>'+esc(s.customerName || 'عميل نقدي')+'</td>' +
           '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td class="small">'+esc(s.note || '-')+'</td>' +
           '<td><button class="btn danger sm no-print" data-del="sales" data-id="'+s.id+'">حذف</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد فواتير.</p>';
 
@@ -401,6 +404,7 @@ function viewSales(v){
         '<label>الإجمالي<input type="number" step="0.01" min="0" id="s-total" required></label>' +
         '<label>المدفوع<input type="number" step="0.01" min="0" id="s-paid"></label>' +
         '<label>طريقة الدفع<select id="s-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<label class="span2">ملاحظة (اختياري)<input id="s-note" placeholder="تفاصيل إضافية..."></label>' +
         '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
     '</div><div class="card"><h3>فواتير البيع ('+rows.length+')</h3>' + rowsHtml + '</div>';
@@ -411,15 +415,15 @@ function viewSales(v){
 
   $('#f-sale').onsubmit = function(e){
     e.preventDefault();
-    var total = num(totalIn.value), customerId = custSel.value, paid = customerId ? num(paidIn.value) : total, method = $('#s-method').value;
+    var total = num(totalIn.value), customerId = custSel.value, paid = customerId ? num(paidIn.value) : total, method = $('#s-method').value, note = $('#s-note').value.trim();
     if(total <= 0 || paid > total) return toast('تأكد من المبالغ', 'err');
     
     var c = customers.find(function(x){ return x.id === customerId; });
     var oldT = totals();
-    db.sales.push({ id: uid(), branchId: session.branchId, date: $('#s-date').value, customerId: customerId || null, customerName: c ? c.name : 'عميل نقدي', total: total, paid: paid, method: method });
+    db.sales.push({ id: uid(), branchId: session.branchId, date: $('#s-date').value, customerId: customerId || null, customerName: c ? c.name : 'عميل نقدي', total: total, paid: paid, method: method, note: note });
     saveDB();
     var newT = totals();
-    logAction('إضافة', 'فاتورة بيع', 'العميل: ' + (c ? c.name : 'نقدي') + ' | المبلغ: ' + paid, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    logAction('إضافة', 'فاتورة بيع', 'العميل: ' + (c ? c.name : 'نقدي') + ' | المبلغ: ' + paid + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewSales(v);
   };
   bindDeletes(v);
@@ -430,10 +434,11 @@ function viewPurchases(v){
   var rows = d.purchases.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   var supOptions = suppliers.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
   
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>المورد</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>طريقة الدفع</th><th></th></tr></thead><tbody>' +
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>المورد</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>الطريقة</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
       rows.map(function(s){
         return '<tr><td>'+s.date+'</td><td>'+esc(s.supplierName || 'مورد نقدي')+'</td>' +
           '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td class="small">'+esc(s.note || '-')+'</td>' +
           '<td><button class="btn danger sm no-print" data-del="purchases" data-id="'+s.id+'">حذف</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد فواتير.</p>';
 
@@ -445,6 +450,7 @@ function viewPurchases(v){
         '<label>الإجمالي<input type="number" step="0.01" min="0" id="p-total" required></label>' +
         '<label>المدفوع<input type="number" step="0.01" min="0" id="p-paid"></label>' +
         '<label>طريقة الدفع<select id="p-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<label class="span2">ملاحظة (اختياري)<input id="p-note" placeholder="تفاصيل إضافية..."></label>' +
         '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
     '</div><div class="card"><h3>فواتير الشراء ('+rows.length+')</h3>' + rowsHtml + '</div>';
@@ -455,15 +461,15 @@ function viewPurchases(v){
 
   $('#f-pur').onsubmit = function(e){
     e.preventDefault();
-    var total = num(totalIn.value), supplierId = supSel.value, paid = supplierId ? num(paidIn.value) : total, method = $('#p-method').value;
+    var total = num(totalIn.value), supplierId = supSel.value, paid = supplierId ? num(paidIn.value) : total, method = $('#p-method').value, note = $('#p-note').value.trim();
     if(total <= 0 || paid > total) return toast('تأكد من المبالغ', 'err');
     
     var s = suppliers.find(function(x){ return x.id === supplierId; });
     var oldT = totals();
-    db.purchases.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, supplierId: supplierId || null, supplierName: s ? s.name : 'مورد نقدي', total: total, paid: paid, method: method });
+    db.purchases.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, supplierId: supplierId || null, supplierName: s ? s.name : 'مورد نقدي', total: total, paid: paid, method: method, note: note });
     saveDB();
     var newT = totals();
-    logAction('إضافة', 'فاتورة شراء', 'المورد: ' + (s ? s.name : 'نقدي') + ' | المبلغ: ' + paid, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    logAction('إضافة', 'فاتورة شراء', 'المورد: ' + (s ? s.name : 'نقدي') + ' | المبلغ: ' + paid + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewPurchases(v);
   };
   bindDeletes(v);
@@ -471,9 +477,10 @@ function viewPurchases(v){
 
 function viewExpenses(v){
   var d = branchData(), rows = d.expenses.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th class="num">المبلغ</th><th>طريقة الدفع</th><th></th></tr></thead><tbody>' +
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th class="num">المبلغ</th><th>الطريقة</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
       rows.map(function(x){
         return '<tr><td>'+x.date+'</td><td>'+esc(x.category)+'</td><td class="num">'+money(x.amount)+'</td><td>'+(x.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td class="small">'+esc(x.note || '-')+'</td>' +
           '<td><button class="btn danger sm no-print" data-del="expenses" data-id="'+x.id+'">حذف</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد مصروفات.</p>';
 
@@ -484,19 +491,20 @@ function viewExpenses(v){
         '<label>نوع المصروف<input id="e-cat" list="exp-cats" placeholder="مثال: إيجار" required><datalist id="exp-cats"><option>إيجار</option><option>رواتب</option><option>كهرباء</option></datalist></label>' +
         '<label>المبلغ<input type="number" step="0.01" min="0" id="e-amount" required></label>' +
         '<label>طريقة الدفع<select id="e-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<label class="span2">ملاحظة (اختياري)<input id="e-note" placeholder="تفاصيل إضافية..."></label>' +
         '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
     '</div><div class="card"><h3>المصروفات ('+rows.length+')</h3>' + rowsHtml + '</div>';
 
   $('#f-exp').onsubmit = function(e){
     e.preventDefault();
-    var amount = num($('#e-amount').value);
+    var amount = num($('#e-amount').value), note = $('#e-note').value.trim();
     if(amount <= 0) return toast('أدخل مبلغاً صحيحاً', 'err');
     var oldT = totals();
-    db.expenses.push({ id: uid(), branchId: session.branchId, date: $('#e-date').value, category: $('#e-cat').value.trim(), amount: amount, method: $('#e-method').value });
+    db.expenses.push({ id: uid(), branchId: session.branchId, date: $('#e-date').value, category: $('#e-cat').value.trim(), amount: amount, method: $('#e-method').value, note: note });
     saveDB();
     var newT = totals();
-    logAction('إضافة', 'مصروف', 'النوع: ' + $('#e-cat').value + ' | المبلغ: ' + amount, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    logAction('إضافة', 'مصروف', 'النوع: ' + $('#e-cat').value + ' | المبلغ: ' + amount + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewExpenses(v);
   };
   bindDeletes(v);
@@ -504,10 +512,11 @@ function viewExpenses(v){
 
 function viewPayments(v){
   var d = branchData(), rows = d.payments.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th>الطرف</th><th class="num">المبلغ</th><th>الطريقة</th><th></th></tr></thead><tbody>' +
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th>الطرف</th><th class="num">المبلغ</th><th>الطريقة</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
       rows.map(function(x){
         return '<tr><td>'+x.date+'</td><td><span class="badge '+(x.direction==='in'?'green':'orange')+'">'+(x.direction==='in'?'قبض':'صرف')+'</span></td>' +
           '<td>'+esc(x.partyName || '—')+'</td><td class="num">'+money(x.amount)+'</td><td>'+(x.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td class="small">'+esc(x.note || '-')+'</td>' +
           '<td><button class="btn danger sm no-print" data-del="payments" data-id="'+x.id+'">حذف</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد دفعات.</p>';
 
@@ -519,6 +528,7 @@ function viewPayments(v){
         '<label>الطرف<select id="p-party"></select></label>' +
         '<label>المبلغ<input type="number" step="0.01" min="0" id="p-amount" required></label>' +
         '<label>طريقة الدفع<select id="p-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<label class="span2">ملاحظة (اختياري)<input id="p-note" placeholder="تفاصيل إضافية..."></label>' +
         '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
     '</div><div class="card"><h3>الدفعات ('+rows.length+')</h3>' + rowsHtml + '</div>';
@@ -532,15 +542,15 @@ function viewPayments(v){
 
   $('#f-pay').onsubmit = function(e){
     e.preventDefault();
-    var amount = num($('#p-amount').value), partyId = partySel.value, method = $('#p-method').value;
+    var amount = num($('#p-amount').value), partyId = partySel.value, method = $('#p-method').value, note = $('#p-note').value.trim();
     if(amount <= 0 || !partyId) return toast('تأكد من البيانات', 'err');
     
     var party = d.contacts.find(function(c){ return c.id === partyId; });
     var oldT = totals();
-    db.payments.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, direction: typeSel.value, partyType: typeSel.value === 'in' ? 'customer' : 'supplier', partyId: partyId, partyName: party ? party.name : '', amount: amount, method: method });
+    db.payments.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, direction: typeSel.value, partyType: typeSel.value === 'in' ? 'customer' : 'supplier', partyId: partyId, partyName: party ? party.name : '', amount: amount, method: method, note: note });
     saveDB();
     var newT = totals();
-    logAction('إضافة', (typeSel.value === 'in' ? 'سند قبض' : 'سند صرف'), 'الطرف: ' + (party ? party.name : '') + ' | المبلغ: ' + amount, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    logAction('إضافة', (typeSel.value === 'in' ? 'سند قبض' : 'سند صرف'), 'الطرف: ' + (party ? party.name : '') + ' | المبلغ: ' + amount + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewPayments(v);
   };
   bindDeletes(v);
@@ -555,8 +565,7 @@ function viewReports(v){
   if(ui.rType === 'weekly'){
     var parts = ui.rDate.split('-');
     var dt = new Date(parts[0], parts[1]-1, parts[2]);
-    var day = dt.getDay(); // 6=Saturday, 0=Sunday...
-    // إعادة ضبط اليوم إلى السبت (6)
+    var day = dt.getDay(); 
     var diff = dt.getDate() - day + (day === 6 ? 0 : -6);
     var sat = new Date(dt.setDate(diff));
     start = isoLocal(sat);
@@ -571,7 +580,6 @@ function viewReports(v){
     end = y + '-' + m + '-' + (lastDay < 10 ? '0'+lastDay : lastDay);
   }
 
-  // تجميع الحركات
   var rSales = d.sales.filter(function(x){ return x.date >= start && x.date <= end; });
   var rPur = d.purchases.filter(function(x){ return x.date >= start && x.date <= end; });
   var rExp = d.expenses.filter(function(x){ return x.date >= start && x.date <= end; });
@@ -583,15 +591,13 @@ function viewReports(v){
   var cashIn = sum(rSales, 'paid') + inPay;
   var cashOut = sum(rPur, 'paid') + totExp + outPay;
 
-  // التحكم بالواجهة
   var controls = '<div class="form-grid no-print">' +
       '<label>نوع التقرير<select id="r-type">' +
         '<option value="daily" '+(ui.rType==='daily'?'selected':'')+'>يومي</option>' +
         '<option value="weekly" '+(ui.rType==='weekly'?'selected':'')+'>أسبوعي (يبدأ من السبت)</option>' +
         '<option value="monthly" '+(ui.rType==='monthly'?'selected':'')+'>شهري</option>' +
-        '<option value="custom" '+(ui.rType==='custom'?'selected':'')+'>مخصص (من - إلى)</option>' +
+        '<option value="custom" '+(ui.rType==='custom'?'selected':'')+'>مخصص</option>' +
       '</select></label>';
-  
   if(ui.rType === 'daily') controls += '<label>التاريخ<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
   if(ui.rType === 'weekly') controls += '<label>تاريخ يوم السبت<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
   if(ui.rType === 'monthly') controls += '<label>الشهر<input type="month" id="r-month" value="'+ui.rMonth+'"></label>';
@@ -601,8 +607,7 @@ function viewReports(v){
 
   var periodLabel = (ui.rType === 'daily') ? 'يوم ' + start :
                     (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الجمعة ' + end :
-                    (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth :
-                    'الفترة من ' + start + ' إلى ' + end;
+                    (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth : 'الفترة من ' + start + ' إلى ' + end;
 
   v.innerHTML = 
     printHeader() +
@@ -619,8 +624,8 @@ function viewReports(v){
       '</div>' +
     '</div>' +
     '<div class="card"><h3>ملخص فواتير المبيعات</h3>' + 
-      (rSales.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>الطريقة</th></tr></thead><tbody>' +
-        rSales.map(function(s){ return '<tr><td>'+s.date+'</td><td>'+esc(s.customerName)+'</td><td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted">لا مبيعات في هذه الفترة.</p>') +
+      (rSales.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>الطريقة</th><th>ملاحظة</th></tr></thead><tbody>' +
+        rSales.map(function(s){ return '<tr><td>'+s.date+'</td><td>'+esc(s.customerName)+'</td><td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td><td class="small">'+esc(s.note||'-')+'</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted">لا مبيعات في هذه الفترة.</p>') +
     '</div>';
 
   $('#r-type').onchange = function(){ ui.rType = this.value; viewReports(v); };
@@ -633,7 +638,7 @@ function viewReports(v){
   $('#r-print').onclick = function(){ window.print(); };
 }
 
-// ---------------- الديون (مع الطباعة) ----------------
+// ---------------- الديون ----------------
 function viewDebts(v){
   var d = branchData();
   var customers = d.contacts.filter(function(c){ return c.type === 'customer'; }).map(function(c){ return { c:c, s:contactStats(c) }; }).filter(function(x){ return x.s.balance !== 0; });
@@ -652,22 +657,39 @@ function viewDebts(v){
     '<div class="card"><h3>ديون الموردين (علينا)</h3>'+tbl(suppliers, 'الموردين')+'</div>';
 }
 
-// ---------------- سجل التدقيق ----------------
+// ---------------- سجل التدقيق (تم تعديله) ----------------
 function viewLedger(v){
   var logs = (db.auditLogs || []).filter(function(l){ return l.branchId === session.branchId; }).sort(function(a,b){ return b.timestamp - a.timestamp; });
+  
   var rowsHtml = logs.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-      '<th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th><th class="num">رصيد الخزينة (قبل ← بعد)</th><th class="num">رصيد البنك (قبل ← بعد)</th>' +
+      '<th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل والملاحظات</th><th class="num">التغيير في الخزينة</th><th class="num">التغيير في البنك</th>' +
       '</tr></thead><tbody>' +
       logs.map(function(l){
-        var cashHtml = (l.oldCash === l.newCash) ? '<span class="muted">'+money(l.newCash)+'</span>' : 
-          '<span class="muted">'+money(l.oldCash)+'</span> <br> <b style="color:' + (l.newCash>=l.oldCash?'var(--ok)':'var(--danger)') + '">← ' + money(l.newCash) + '</b>';
-        var bankHtml = (l.oldBank === l.newBank) ? '<span class="muted">'+money(l.newBank)+'</span>' : 
-          '<span class="muted">'+money(l.oldBank)+'</span> <br> <b style="color:' + (l.newBank>=l.oldBank?'var(--ok)':'var(--danger)') + '">← ' + money(l.newBank) + '</b>';
+        // حساب الفرق (ماذا زاد أو نقص)
+        var cashDiff = num(l.newCash) - num(l.oldCash);
+        var bankDiff = num(l.newBank) - num(l.oldBank);
+        
+        var cashHtml = cashDiff === 0 ? '<span class="muted">-</span>' : 
+                       cashDiff > 0 ? '<span style="color:var(--ok);font-weight:bold">+ ' + money(cashDiff) + '</span>' : 
+                       '<span style="color:var(--danger);font-weight:bold">- ' + money(Math.abs(cashDiff)) + '</span>';
+                       
+        var bankHtml = bankDiff === 0 ? '<span class="muted">-</span>' : 
+                       bankDiff > 0 ? '<span style="color:var(--ok);font-weight:bold">+ ' + money(bankDiff) + '</span>' : 
+                       '<span style="color:var(--danger);font-weight:bold">- ' + money(Math.abs(bankDiff)) + '</span>';
+
         var actionBadge = l.action==='إضافة' ? 'green' : l.action==='حذف' ? 'red' : 'orange';
-        return '<tr><td class="small">' + l.dateStr + '</td><td><b>' + esc(l.user) + '</b></td><td><span class="badge ' + actionBadge + '">' + l.action + '</span></td>' +
-          '<td>' + esc(l.entity) + '<br><span class="muted small">' + esc(l.details) + '</span></td><td class="num">' + cashHtml + '</td><td class="num">' + bankHtml + '</td></tr>';
-      }).join('') + '</tbody></table></div>' : '<p class="muted">سجل التدقيق فارغ.</p>';
-  v.innerHTML = '<div class="card"><h3>سجل الحركات والتدقيق</h3>' + rowsHtml + '</div>';
+
+        return '<tr>' +
+          '<td class="small" style="white-space:nowrap">' + l.dateStr + '</td>' +
+          '<td><b>' + esc(l.user) + '</b></td>' +
+          '<td><span class="badge ' + actionBadge + '">' + l.action + '</span></td>' +
+          '<td>' + esc(l.entity) + '<br><span class="muted small">' + esc(l.details) + '</span></td>' +
+          '<td class="num">' + cashHtml + '</td>' +
+          '<td class="num">' + bankHtml + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">سجل التدقيق فارغ حتى الآن.</p>';
+
+  v.innerHTML = '<div class="card"><h3>سجل الحركات والتدقيق</h3><p class="muted small">يعرض هذا السجل: من قام بالعملية، ومتى، والتفاصيل والملاحظات، ومقدار الزيادة أو النقصان في الخزينة والبنك.</p>' + rowsHtml + '</div>';
 }
 
 // ---------------- أطراف ----------------
@@ -714,6 +736,9 @@ function bindDeletes(v){
       else if(col === 'expenses') desc = item.category+' | المبلغ: '+item.amount;
       else if(col === 'payments') desc = item.partyName+' | المبلغ: '+item.amount;
       else if(col === 'contacts') desc = item.name;
+      
+      if(item.note) desc += ' | ملاحظة: ' + item.note;
+      
       logAction('حذف', entityName, desc, oldT.cash, newT.cash, oldT.bank, newT.bank);
       toast('تم الحذف'); renderView();
     };
