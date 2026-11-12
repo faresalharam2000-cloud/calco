@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>نظام حسابات الشركة</title>
+<title>نظام حسابات الشركة - تقارير متقدمة</title>
 <style>
 :root{--bg:#f4f6fb;--card:#fff;--ink:#1b2430;--muted:#6b7688;--line:#e3e8f0;--primary:#1f6feb;--primary-d:#1558c4;--ok:#0f9d58;--warn:#e8a33d;--danger:#e5484d;--radius:14px}
 *{box-sizing:border-box}
@@ -70,7 +70,7 @@ input:disabled{background:#f1f3f7;color:#8b95a6}
 .span2{grid-column:1/-1}
 .tbl-wrap{overflow-x:auto}
 table.tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th,.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right}
+.tbl th,.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
 .tbl th{background:#f8fafd;font-size:12px;color:var(--muted);font-weight:800;white-space:nowrap}
 .tbl td.num,.tbl th.num{text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
 .tbl tr:hover td{background:#fbfcfe}
@@ -90,18 +90,31 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 #error-overlay h2{color:#c00}
 #error-msg{background:#fee;padding:16px;border-radius:10px;white-space:pre-wrap;word-break:break-word;font-size:13px;color:#900;border:1px solid #f5c6c7}
 #error-overlay button{padding:10px 20px;font-size:15px;cursor:pointer;margin-left:10px;border-radius:8px;border:1px solid #ccc;background:#f6f8fc}
-@media print{.app-header,.app-tabs,.btn{display:none!important}body{background:#fff}.card{box-shadow:none;border:1px solid #ddd}}
+
+/* أنماط الطباعة */
+.print-only{display:none;}
+@media print{
+  body{background:#fff;font-size:12px;}
+  .app-header,.app-tabs,.btn,.no-print,.tabs{display:none!important;}
+  .card{box-shadow:none;border:none;padding:0;margin-bottom:20px;}
+  .view{padding:0;max-width:100%;}
+  .print-only{display:block !important;text-align:center;margin-bottom:20px;border-bottom:2px solid #000;padding-bottom:10px;}
+  .tbl th{background:#f0f0f0 !important;-webkit-print-color-adjust:exact;color:#000;}
+  .tbl th,.tbl td{border:1px solid #ddd;}
+  .grid.cards{display:block;}
+  .stat{border:none;padding:5px 0;display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;}
+  .stat-value{font-size:16px;}
+}
 </style>
 </head>
 <body>
 
 <div id="error-overlay">
   <h2>⚠️ حدث خطأ في الصفحة</h2>
-  <p>انسخ الرسالة التالية وأرسلها لإصلاح المشكلة:</p>
   <pre id="error-msg"></pre>
   <div style="margin-top:20px">
     <button onclick="location.reload()">إعادة تحميل</button>
-    <button onclick="try{localStorage.removeItem('accsys_v1');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
+    <button onclick="try{localStorage.removeItem('accsys_v3');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
   </div>
 </div>
 
@@ -119,11 +132,11 @@ function showError(msg){
 window.addEventListener('error', function(e){ showError((e.message||'') + '\n' + ((e.error && e.error.stack) || '')); });
 
 try {
-var KEY = 'accsys_v2'; // تم تغيير الإصدار لتهيئة بيانات جديدة
+var KEY = 'accsys_v3'; // تم تحديث الإصدار لإضافة التقارير
 var SKEY = 'accsys_session';
 var db = loadDB();
 var session = loadSession();
-var ui = { tab:'dashboard', reportPeriod:'day', reportFrom:'', reportTo:'' };
+var ui = { tab:'dashboard', rType:'weekly', rDate:today(), rStart:today(), rEnd:today(), rMonth:today().slice(0,7) };
 
 function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
 
@@ -139,12 +152,12 @@ function seedDB(){
       { id:'u1', companyId:cid, branchId:'br_main', name:'مدير النظام',   username:'admin', password:'1234', role:'مدير' },
       { id:'u2', companyId:cid, branchId:'br_jed',  name:'مدير فرع جدة', username:'admin', password:'1234', role:'مدير' }
     ],
-    contacts:[], sales:[], purchases:[], expenses:[], payments:[]
+    contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: []
   };
 }
 function loadDB(){
   try{ var raw = localStorage.getItem(KEY); if(raw){ var obj = JSON.parse(raw); if(obj && obj.companies) {
-    // تحديث هيكل البيانات القديم ليتوافق مع البنك
+    if(!obj.auditLogs) obj.auditLogs = [];
     obj.companies.forEach(function(c){ c.branches.forEach(function(b){ if(b.bankOpening === undefined) b.bankOpening = 0; }); });
     return obj;
   } } }catch(e){}
@@ -174,8 +187,7 @@ function money(n){
   return num(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + cur;
 }
 function toast(msg, type){
-  var t = document.createElement('div');
-  t.className = 'toast ' + (type||'ok'); t.textContent = msg;
+  var t = document.createElement('div'); t.className = 'toast ' + (type||'ok'); t.textContent = msg;
   document.body.appendChild(t);
   requestAnimationFrame(function(){ t.classList.add('show'); });
   setTimeout(function(){ t.classList.remove('show'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); },300); }, 2400);
@@ -200,59 +212,42 @@ function branchData(){
 
 function totals(){
   var d = branchData(), b = currentBranch() || { cashOpening:0, bankOpening:0 };
-  var cash = num(b.cashOpening);
-  var bank = num(b.bankOpening);
-
-  d.sales.forEach(function(x){
-    if(x.method === 'bank') bank += num(x.paid);
-    else cash += num(x.paid);
-  });
-  d.purchases.forEach(function(x){
-    if(x.method === 'bank') bank -= num(x.paid);
-    else cash -= num(x.paid);
-  });
-  d.expenses.forEach(function(x){
-    if(x.method === 'bank') bank -= num(x.amount);
-    else cash -= num(x.amount);
-  });
+  var cash = num(b.cashOpening), bank = num(b.bankOpening);
+  d.sales.forEach(function(x){ if(x.method === 'bank') bank += num(x.paid); else cash += num(x.paid); });
+  d.purchases.forEach(function(x){ if(x.method === 'bank') bank -= num(x.paid); else cash -= num(x.paid); });
+  d.expenses.forEach(function(x){ if(x.method === 'bank') bank -= num(x.amount); else cash -= num(x.amount); });
   d.payments.forEach(function(x){
     var val = num(x.amount);
-    if(x.direction === 'in'){ // قبض
-      if(x.method === 'bank') bank += val; else cash += val;
-    } else { // صرف
-      if(x.method === 'bank') bank -= val; else cash -= val;
-    }
+    if(x.direction === 'in'){ if(x.method === 'bank') bank += val; else cash += val; } 
+    else { if(x.method === 'bank') bank -= val; else cash -= val; }
   });
+  return { cash: cash, bank: bank, totalLiquidity: cash + bank };
+}
 
-  return { cash: cash, bank: bank, totalLiquidity: cash + bank,
-    salesTotal: sum(d.sales,'total'), purTotal: sum(d.purchases,'total'),
-    expTotal: sum(d.expenses,'amount') };
+function logAction(action, entity, details, oldCash, newCash, oldBank, newBank) {
+  if(!db.auditLogs) db.auditLogs = [];
+  var u = currentUser();
+  db.auditLogs.push({
+    id: uid(), branchId: session.branchId, timestamp: Date.now(),
+    dateStr: new Date().toLocaleString('ar-EG', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }),
+    user: u ? u.name : 'غير معروف', action: action, entity: entity, details: details,
+    oldCash: oldCash, newCash: newCash, oldBank: oldBank, newBank: newBank
+  });
+  saveDB();
 }
 
 function contactStats(c){
   var d = branchData();
   if(c.type === 'customer'){
     var inv = d.sales.filter(function(s){ return s.customerId===c.id; });
-    var total = sum(inv,'total');
-    var paidUpfront = sum(inv,'paid');
+    var total = sum(inv,'total'), paidUpfront = sum(inv,'paid');
     var later = sum(d.payments.filter(function(p){ return p.partyId===c.id && p.direction==='in'; }),'amount');
     return { total: total, paid: paidUpfront + later, balance: total - paidUpfront - later };
   }
   var inv2 = d.purchases.filter(function(s){ return s.supplierId===c.id; });
-  var total2 = sum(inv2,'total');
-  var paidUpfront2 = sum(inv2,'paid');
+  var total2 = sum(inv2,'total'), paidUpfront2 = sum(inv2,'paid');
   var later2 = sum(d.payments.filter(function(p){ return p.partyId===c.id && p.direction==='out'; }),'amount');
   return { total: total2, paid: paidUpfront2 + later2, balance: total2 - paidUpfront2 - later2 };
-}
-
-function debtTotals(){
-  var d = branchData(), cd = 0, sd = 0;
-  d.contacts.forEach(function(c){
-    var bal = contactStats(c).balance;
-    if(c.type==='customer' && bal > 0) cd += bal;
-    if(c.type==='supplier' && bal > 0) sd += bal;
-  });
-  return { customerDebt: cd, supplierDebt: sd };
 }
 
 function render(){
@@ -269,43 +264,23 @@ function render(){
   return viewApp();
 }
 
-// ---------------- الشاشات الأساسية (دخول، فروع) ----------------
+// ---------------- الشاشات الأساسية ----------------
 function viewCompanyLogin(){
   root.innerHTML =
-    '<div class="auth-wrap"><div class="auth-card">' +
-      '<h1>📊 نظام حسابات الشركة</h1>' +
+    '<div class="auth-wrap"><div class="auth-card"><h1>📊 نظام حسابات الشركة</h1>' +
       '<form id="form-company-login" class="stack">' +
         '<label>رمز الشركة<input id="c-code" placeholder="مثال: DEMO" autocomplete="off" required></label>' +
         '<label>كلمة مرور الشركة<input id="c-pass" type="password" placeholder="••••" required></label>' +
         '<button class="btn primary" type="submit">دخول الشركة</button>' +
       '</form><div id="msg" class="msg"></div>' +
-      '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إنشاء شركة جديدة</summary>' +
-        '<form id="form-company-new" class="stack mt">' +
-          '<label>اسم الشركة<input id="n-name" required></label>' +
-          '<label>رمز الشركة (للدخول)<input id="n-code" placeholder="مثال: ABC" required></label>' +
-          '<label>كلمة المرور<input id="n-pass" type="password" required></label>' +
-          '<label>العملة<input id="n-cur" value="ر.س"></label>' +
-          '<button class="btn" type="submit">إنشاء الشركة</button>' +
-        '</form>' +
-      '</details>' +
-      '<p class="hint">تجربة سريعة: رمز الشركة <b>DEMO</b> — كلمة المرور <b>1234</b></p>' +
+      '<p class="hint">تجربة: الرمز <b>DEMO</b> — كلمة المرور <b>1234</b></p>' +
     '</div></div>';
-
   $('#form-company-login').onsubmit = function(e){
     e.preventDefault();
     var code = $('#c-code').value.trim().toUpperCase(), pass = $('#c-pass').value;
     var c = db.companies.find(function(x){ return x.code.toUpperCase() === code; });
     if(!c || c.password !== pass) return flash('رمز الشركة أو كلمة المرور غير صحيحة');
     session = { companyId:c.id, branchId:null, userId:null }; saveSession(); render();
-  };
-
-  $('#form-company-new').onsubmit = function(e){
-    e.preventDefault();
-    var name = $('#n-name').value.trim(), code = $('#n-code').value.trim().toUpperCase(), pass = $('#n-pass').value, cur = $('#n-cur').value.trim() || 'ر.س';
-    if(!name || !code || !pass) return flash('أكمل جميع الحقول');
-    if(db.companies.some(function(c){ return c.code.toUpperCase() === code; })) return flash('رمز الشركة مستخدم مسبقًا');
-    db.companies.push({ id: uid(), name:name, code:code, password:pass, currency:cur, branches: [{ id: uid(), name:'الفرع الرئيسي', code:'01', cashOpening:0, bankOpening:0 }] });
-    saveDB(); flash('تم إنشاء الشركة — يمكنك الدخول الآن', 'ok'); $('#c-code').value = code;
   };
 }
 
@@ -314,88 +289,42 @@ function viewBranchSelect(){
   var cards = c.branches.map(function(b){
     return '<button class="branch-card" data-branch="'+b.id+'"><span class="branch-icon">🏢</span><span class="branch-name">'+esc(b.name)+'</span><span class="muted small">رمز: '+esc(b.code)+'</span></button>';
   }).join('');
-
   root.innerHTML =
     '<div class="auth-wrap"><div class="auth-card wide">' +
-      '<div class="topbar"><div><div style="font-weight:900;font-size:17px">'+esc(c.name)+'</div><div class="muted small">اختر الفرع للمتابعة</div></div><button class="btn ghost sm" id="btn-back-company">تغيير الشركة</button></div>' +
-      '<div class="branch-grid">'+cards+'</div>' +
-      '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إضافة فرع جديد</summary>' +
-        '<form id="form-branch-new" class="row mt"><input id="b-name" placeholder="اسم الفرع" required style="flex:2;min-width:160px"><input id="b-code" placeholder="رمز الفرع" required style="flex:1;min-width:100px"><button class="btn" type="submit">إضافة</button></form>' +
-      '</details><div id="msg" class="msg"></div>' +
+      '<div class="topbar"><div><div style="font-weight:900;font-size:17px">'+esc(c.name)+'</div><div class="muted small">اختر الفرع</div></div><button class="btn ghost sm" id="btn-back-company">تغيير الشركة</button></div>' +
+      '<div class="branch-grid">'+cards+'</div><div id="msg" class="msg"></div>' +
     '</div></div>';
-
   root.querySelectorAll('[data-branch]').forEach(function(btn){ btn.onclick = function(){ session.branchId = btn.dataset.branch; session.userId = null; saveSession(); render(); }; });
   $('#btn-back-company').onclick = function(){ session = { companyId:null, branchId:null, userId:null }; saveSession(); render(); };
-  $('#form-branch-new').onsubmit = function(e){
-    e.preventDefault();
-    var name = $('#b-name').value.trim(), code = $('#b-code').value.trim();
-    if(!name || !code) return flash('أدخل اسم ورمز الفرع');
-    if(c.branches.some(function(b){ return b.code === code; })) return flash('رمز الفرع مستخدم');
-    c.branches.push({ id: uid(), name:name, code:code, cashOpening:0, bankOpening:0 });
-    saveDB(); toast('تم إضافة الفرع'); render();
-  };
 }
 
 function viewUserAuth(){
   var c = currentCompany(), b = currentBranch();
-  var isDemo = c.id === 'comp_demo';
   root.innerHTML =
     '<div class="auth-wrap"><div class="auth-card">' +
       '<div class="topbar"><div><div style="font-weight:900">'+esc(c.name)+'</div><div class="muted small">'+esc(b.name)+'</div></div><button class="btn ghost sm" id="btn-back-branch">تغيير الفرع</button></div>' +
-      '<div class="tabs"><button class="tab active" data-mode="login">دخول</button><button class="tab" data-mode="register">حساب جديد</button></div>' +
       '<form id="form-user-login" class="stack">' +
         '<label>اسم المستخدم<input id="u-user" autocomplete="off" required></label>' +
         '<label>كلمة المرور<input id="u-pass" type="password" required></label>' +
         '<button class="btn primary" type="submit">دخول</button>' +
-      '</form>' +
-      '<form id="form-user-register" class="stack hidden">' +
-        '<label>الاسم الكامل<input id="r-name" required></label>' +
-        '<label>اسم المستخدم<input id="r-user" autocomplete="off" required></label>' +
-        '<label>كلمة المرور<input id="r-pass" type="password" required></label>' +
-        '<label>الدور<select id="r-role"><option>مدير</option><option>محاسب</option><option>كاشير</option></select></label>' +
-        '<button class="btn" type="submit">إنشاء الحساب</button>' +
       '</form><div id="msg" class="msg"></div>' +
-      (isDemo ? '<p class="hint">تجربة: اسم المستخدم <b>admin</b> — كلمة المرور <b>1234</b></p>' : '') +
+      '<p class="hint">تجربة: <b>admin</b> / <b>1234</b></p>' +
     '</div></div>';
-
-  root.querySelectorAll('[data-mode]').forEach(function(t){
-    t.onclick = function(){
-      root.querySelectorAll('[data-mode]').forEach(function(x){ x.classList.toggle('active', x === t); });
-      var login = t.dataset.mode === 'login';
-      $('#form-user-login').classList.toggle('hidden', !login);
-      $('#form-user-register').classList.toggle('hidden', login);
-      flash('');
-    };
-  });
   $('#btn-back-branch').onclick = function(){ session.branchId = null; session.userId = null; saveSession(); render(); };
   $('#form-user-login').onsubmit = function(e){
     e.preventDefault();
     var username = $('#u-user').value.trim(), pass = $('#u-pass').value;
     var u = db.users.find(function(x){ return x.branchId === session.branchId && x.username.toLowerCase() === username.toLowerCase(); });
-    if(!u || u.password !== pass) return flash('اسم المستخدم أو كلمة المرور غير صحيحة');
+    if(!u || u.password !== pass) return flash('البيانات غير صحيحة');
     session.userId = u.id; saveSession(); render();
-  };
-  $('#form-user-register').onsubmit = function(e){
-    e.preventDefault();
-    var name = $('#r-name').value.trim(), username = $('#r-user').value.trim(), pass = $('#r-pass').value, role = $('#r-role').value;
-    if(!name || !username || !pass) return flash('أكمل جميع الحقول');
-    if(db.users.some(function(u){ return u.branchId === session.branchId && u.username.toLowerCase() === username.toLowerCase(); })) return flash('اسم المستخدم مستخدم مسبقاً');
-    var u = { id: uid(), companyId: session.companyId, branchId: session.branchId, name:name, username:username, password:pass, role:role };
-    db.users.push(u); saveDB(); session.userId = u.id; saveSession(); render();
   };
 }
 
 // ---------------- التطبيق الرئيسي ----------------
 var TABS = [
-  ['dashboard','لوحة التحكم'],
-  ['sales','المبيعات'],
-  ['purchases','المشتريات'],
-  ['expenses','المصروفات'],
-  ['payments','الدفعات'],
-  ['debts','الديون'],
-  ['contacts','العملاء والموردون'],
-  ['ledger','سجل الحركات'],
-  ['reports','التقارير']
+  ['dashboard','لوحة التحكم'], ['sales','المبيعات'], ['purchases','المشتريات'],
+  ['expenses','المصروفات'], ['payments','الدفعات'], ['debts','الديون'],
+  ['contacts','العملاء والموردون'], ['reports','التقارير'], ['ledger','سجل الحركات']
 ];
 
 function viewApp(){
@@ -404,7 +333,7 @@ function viewApp(){
 
   root.innerHTML =
     '<header class="app-header"><div class="brand">📊 نظام الحسابات</div>' +
-      '<div class="ctx"><span class="chip">'+esc(c.name)+'</span><span class="chip strong">'+esc(b.name)+'</span><span class="chip user">'+esc(u.name)+' · '+esc(u.role)+'</span></div>' +
+      '<div class="ctx"><span class="chip">'+esc(c.name)+'</span><span class="chip strong">'+esc(b.name)+'</span><span class="chip user">'+esc(u.name)+'</span></div>' +
       '<button class="btn ghost sm" id="btn-logout">خروج</button>' +
     '</header><nav class="app-tabs">'+tabsHtml+'</nav><main id="view" class="view"></main>';
 
@@ -419,199 +348,180 @@ function renderView(){
   (views[ui.tab] || viewDashboard)(v);
 }
 
-// ---------------- لوحة التحكم ----------------
-function viewDashboard(v){
-  var t = totals(), dt = debtTotals(), b = currentBranch();
+function printHeader() {
+  var c = currentCompany(), b = currentBranch();
+  return '<div class="print-only"><h2>' + esc(c.name) + '</h2><h3>فرع: ' + esc(b.name) + '</h3><p>تاريخ الطباعة: ' + new Date().toLocaleString('ar-EG') + '</p></div>';
+}
 
+function viewDashboard(v){
+  var t = totals(), b = currentBranch();
   v.innerHTML =
     '<div class="grid cards">' +
-      stat('رصيد الخزينة (نقدي)', money(t.cash), 'ok') +
+      stat('رصيد الخزينة', money(t.cash), 'ok') +
       stat('رصيد البنك', money(t.bank), 'bank') +
       stat('إجمالي السيولة', money(t.totalLiquidity), 'primary') +
-      stat('ديون العملاء', money(dt.customerDebt), 'warn') +
-      stat('ديون الموردين', money(dt.supplierDebt), 'warn') +
     '</div>' +
-    '<div class="grid two">' +
-      '<div class="card"><h3>إعدادات الأرصدة الافتتاحية</h3>' +
-        '<form id="form-opening" class="form-grid">' +
-          '<label>الرصيد النقدي الافتتاحي<input type="number" step="0.01" id="opening-cash" value="'+num(b.cashOpening)+'"></label>' +
-          '<label>رصيد البنك الافتتاحي<input type="number" step="0.01" id="opening-bank" value="'+num(b.bankOpening)+'"></label>' +
-          '<div class="span2"><button class="btn primary" type="submit">حفظ الأرصدة</button></div>' +
-        '</form>' +
-        '<p class="muted small mt">هذه الأرصدة تمثل بداية العمل. يتم إضافة المبيعات والدفعات وخصم المصروفات تلقائياً منها.</p>' +
-      '</div>' +
-      '<div class="card"><h3>ملخص الأداء</h3>' +
-        '<p>إجمالي المبيعات: <b>' + money(t.salesTotal) + '</b></p>' +
-        '<p>إجمالي المشتريات: <b>' + money(t.purTotal) + '</b></p>' +
-        '<p>إجمالي المصروفات: <b>' + money(t.expTotal) + '</b></p>' +
-      '</div>' +
+    '<div class="card"><h3>إعدادات الأرصدة الافتتاحية</h3>' +
+      '<form id="form-opening" class="form-grid">' +
+        '<label>الرصيد النقدي الافتتاحي<input type="number" step="0.01" id="opening-cash" value="'+num(b.cashOpening)+'"></label>' +
+        '<label>رصيد البنك الافتتاحي<input type="number" step="0.01" id="opening-bank" value="'+num(b.bankOpening)+'"></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">حفظ الأرصدة</button></div>' +
+      '</form>' +
     '</div>';
 
   $('#form-opening').onsubmit = function(e){
     e.preventDefault();
+    var oldT = totals();
     b.cashOpening = num($('#opening-cash').value);
     b.bankOpening = num($('#opening-bank').value);
-    saveDB(); toast('تم حفظ الأرصدة الافتتاحية'); viewDashboard(v);
+    saveDB();
+    var newT = totals();
+    logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية', oldT.cash, newT.cash, oldT.bank, newT.bank);
+    toast('تم الحفظ'); viewDashboard(v);
   };
 }
 
-// ---------------- المبيعات ----------------
 function viewSales(v){
-  var d = branchData();
-  var customers = d.contacts.filter(function(c){ return c.type === 'customer'; });
+  var d = branchData(), customers = d.contacts.filter(function(c){ return c.type === 'customer'; });
   var rows = d.sales.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-
   var custOptions = customers.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>طريقة الدفع</th><th class="num">المتبقي</th><th></th></tr></thead><tbody>' +
+  
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>طريقة الدفع</th><th></th></tr></thead><tbody>' +
       rows.map(function(s){
-        var payM = s.method === 'bank' ? 'بنك' : 'نقدي';
         return '<tr><td>'+s.date+'</td><td>'+esc(s.customerName || 'عميل نقدي')+'</td>' +
-          '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+payM+'</td>' +
-          '<td class="num">'+money(num(s.total) - num(s.paid))+'</td>' +
-          '<td><button class="btn danger sm" data-del="sales" data-id="'+s.id+'">حذف</button></td></tr>';
-      }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد فواتير بيع.</p>';
+          '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td><button class="btn danger sm no-print" data-del="sales" data-id="'+s.id+'">حذف</button></td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد فواتير.</p>';
 
   v.innerHTML =
-    '<div class="card"><h3>إضافة فاتورة بيع</h3>' +
+    '<div class="card no-print"><h3>إضافة فاتورة بيع</h3>' +
       '<form id="f-sale" class="form-grid">' +
         '<label>التاريخ<input type="date" id="s-date" value="'+today()+'" required></label>' +
-        '<label>العميل<select id="s-customer"><option value="">عميل نقدي (يدفع الكل)</option>'+custOptions+'</select></label>' +
+        '<label>العميل<select id="s-customer"><option value="">عميل نقدي</option>'+custOptions+'</select></label>' +
         '<label>الإجمالي<input type="number" step="0.01" min="0" id="s-total" required></label>' +
         '<label>المدفوع<input type="number" step="0.01" min="0" id="s-paid"></label>' +
-        '<label>طريقة الدفع<select id="s-method"><option value="cash">الخزينة (نقدي)</option><option value="bank">البنك</option></select></label>' +
-        '<div class="span2"><button class="btn primary" type="submit">إضافة الفاتورة</button></div>' +
+        '<label>طريقة الدفع<select id="s-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
-    '</div>' +
-    '<div class="card"><h3>فواتير البيع ('+rows.length+')</h3>' + rowsHtml + '</div>';
+    '</div><div class="card"><h3>فواتير البيع ('+rows.length+')</h3>' + rowsHtml + '</div>';
 
   var custSel = $('#s-customer'), totalIn = $('#s-total'), paidIn = $('#s-paid');
-  function syncPaid(){
-    if(!custSel.value){ paidIn.value = totalIn.value || ''; paidIn.disabled = true; }
-    else paidIn.disabled = false;
-  }
+  function syncPaid(){ if(!custSel.value){ paidIn.value = totalIn.value || ''; paidIn.disabled = true; } else paidIn.disabled = false; }
   custSel.onchange = syncPaid; totalIn.oninput = syncPaid; syncPaid();
 
   $('#f-sale').onsubmit = function(e){
     e.preventDefault();
     var total = num(totalIn.value), customerId = custSel.value, paid = customerId ? num(paidIn.value) : total, method = $('#s-method').value;
-    if(total <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
-    if(paid > total) return toast('المدفوع أكبر من الإجمالي', 'err');
+    if(total <= 0 || paid > total) return toast('تأكد من المبالغ', 'err');
+    
     var c = customers.find(function(x){ return x.id === customerId; });
+    var oldT = totals();
     db.sales.push({ id: uid(), branchId: session.branchId, date: $('#s-date').value, customerId: customerId || null, customerName: c ? c.name : 'عميل نقدي', total: total, paid: paid, method: method });
-    saveDB(); toast('تم إضافة فاتورة البيع'); viewSales(v);
+    saveDB();
+    var newT = totals();
+    logAction('إضافة', 'فاتورة بيع', 'العميل: ' + (c ? c.name : 'نقدي') + ' | المبلغ: ' + paid, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    toast('تمت الإضافة'); viewSales(v);
   };
   bindDeletes(v);
 }
 
-// ---------------- المشتريات ----------------
 function viewPurchases(v){
-  var d = branchData();
-  var suppliers = d.contacts.filter(function(c){ return c.type === 'supplier'; });
+  var d = branchData(), suppliers = d.contacts.filter(function(c){ return c.type === 'supplier'; });
   var rows = d.purchases.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   var supOptions = suppliers.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
   
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>المورد</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>طريقة الدفع</th><th class="num">المتبقي</th><th></th></tr></thead><tbody>' +
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>المورد</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>طريقة الدفع</th><th></th></tr></thead><tbody>' +
       rows.map(function(s){
-        var payM = s.method === 'bank' ? 'بنك' : 'نقدي';
         return '<tr><td>'+s.date+'</td><td>'+esc(s.supplierName || 'مورد نقدي')+'</td>' +
-          '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+payM+'</td>' +
-          '<td class="num">'+money(num(s.total) - num(s.paid))+'</td>' +
-          '<td><button class="btn danger sm" data-del="purchases" data-id="'+s.id+'">حذف</button></td></tr>';
-      }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد فواتير شراء.</p>';
+          '<td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td><button class="btn danger sm no-print" data-del="purchases" data-id="'+s.id+'">حذف</button></td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد فواتير.</p>';
 
   v.innerHTML =
-    '<div class="card"><h3>إضافة فاتورة شراء</h3>' +
+    '<div class="card no-print"><h3>إضافة فاتورة شراء</h3>' +
       '<form id="f-pur" class="form-grid">' +
         '<label>التاريخ<input type="date" id="p-date" value="'+today()+'" required></label>' +
-        '<label>المورد<select id="p-supplier"><option value="">مورد نقدي (يدفع الكل)</option>'+supOptions+'</select></label>' +
+        '<label>المورد<select id="p-supplier"><option value="">مورد نقدي</option>'+supOptions+'</select></label>' +
         '<label>الإجمالي<input type="number" step="0.01" min="0" id="p-total" required></label>' +
         '<label>المدفوع<input type="number" step="0.01" min="0" id="p-paid"></label>' +
-        '<label>طريقة الدفع<select id="p-method"><option value="cash">الخزينة (نقدي)</option><option value="bank">البنك</option></select></label>' +
-        '<div class="span2"><button class="btn primary" type="submit">إضافة الفاتورة</button></div>' +
+        '<label>طريقة الدفع<select id="p-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
-    '</div>' +
-    '<div class="card"><h3>فواتير الشراء ('+rows.length+')</h3>' + rowsHtml + '</div>';
+    '</div><div class="card"><h3>فواتير الشراء ('+rows.length+')</h3>' + rowsHtml + '</div>';
 
   var supSel = $('#p-supplier'), totalIn = $('#p-total'), paidIn = $('#p-paid');
-  function syncPaid(){
-    if(!supSel.value){ paidIn.value = totalIn.value || ''; paidIn.disabled = true; }
-    else paidIn.disabled = false;
-  }
+  function syncPaid(){ if(!supSel.value){ paidIn.value = totalIn.value || ''; paidIn.disabled = true; } else paidIn.disabled = false; }
   supSel.onchange = syncPaid; totalIn.oninput = syncPaid; syncPaid();
 
   $('#f-pur').onsubmit = function(e){
     e.preventDefault();
     var total = num(totalIn.value), supplierId = supSel.value, paid = supplierId ? num(paidIn.value) : total, method = $('#p-method').value;
-    if(total <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
-    if(paid > total) return toast('المدفوع أكبر من الإجمالي', 'err');
+    if(total <= 0 || paid > total) return toast('تأكد من المبالغ', 'err');
+    
     var s = suppliers.find(function(x){ return x.id === supplierId; });
+    var oldT = totals();
     db.purchases.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, supplierId: supplierId || null, supplierName: s ? s.name : 'مورد نقدي', total: total, paid: paid, method: method });
-    saveDB(); toast('تم إضافة فاتورة الشراء'); viewPurchases(v);
+    saveDB();
+    var newT = totals();
+    logAction('إضافة', 'فاتورة شراء', 'المورد: ' + (s ? s.name : 'نقدي') + ' | المبلغ: ' + paid, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    toast('تمت الإضافة'); viewPurchases(v);
   };
   bindDeletes(v);
 }
 
-// ---------------- المصروفات ----------------
 function viewExpenses(v){
-  var d = branchData();
-  var rows = d.expenses.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th class="num">المبلغ</th><th>طريقة الدفع</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
+  var d = branchData(), rows = d.expenses.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th class="num">المبلغ</th><th>طريقة الدفع</th><th></th></tr></thead><tbody>' +
       rows.map(function(x){
-        var payM = x.method === 'bank' ? 'بنك' : 'نقدي';
-        return '<tr><td>'+x.date+'</td><td>'+esc(x.category)+'</td><td class="num">'+money(x.amount)+'</td><td>'+payM+'</td><td>'+esc(x.note || '')+'</td>' +
-          '<td><button class="btn danger sm" data-del="expenses" data-id="'+x.id+'">حذف</button></td></tr>';
+        return '<tr><td>'+x.date+'</td><td>'+esc(x.category)+'</td><td class="num">'+money(x.amount)+'</td><td>'+(x.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td><button class="btn danger sm no-print" data-del="expenses" data-id="'+x.id+'">حذف</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد مصروفات.</p>';
 
   v.innerHTML =
-    '<div class="card"><h3>إضافة مصروف</h3>' +
+    '<div class="card no-print"><h3>إضافة مصروف</h3>' +
       '<form id="f-exp" class="form-grid">' +
         '<label>التاريخ<input type="date" id="e-date" value="'+today()+'" required></label>' +
-        '<label>نوع المصروف<input id="e-cat" list="exp-cats" placeholder="مثال: إيجار" required><datalist id="exp-cats"><option>إيجار</option><option>رواتب</option><option>كهرباء</option><option>أخرى</option></datalist></label>' +
+        '<label>نوع المصروف<input id="e-cat" list="exp-cats" placeholder="مثال: إيجار" required><datalist id="exp-cats"><option>إيجار</option><option>رواتب</option><option>كهرباء</option></datalist></label>' +
         '<label>المبلغ<input type="number" step="0.01" min="0" id="e-amount" required></label>' +
-        '<label>طريقة الدفع<select id="e-method"><option value="cash">الخزينة (نقدي)</option><option value="bank">البنك</option></select></label>' +
-        '<label class="span2">ملاحظة<input id="e-note"></label>' +
-        '<div class="span2"><button class="btn primary" type="submit">إضافة المصروف</button></div>' +
+        '<label>طريقة الدفع<select id="e-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
-    '</div>' +
-    '<div class="card"><h3>المصروفات ('+rows.length+')</h3>' + rowsHtml + '</div>';
+    '</div><div class="card"><h3>المصروفات ('+rows.length+')</h3>' + rowsHtml + '</div>';
 
   $('#f-exp').onsubmit = function(e){
     e.preventDefault();
     var amount = num($('#e-amount').value);
-    if(amount <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
-    db.expenses.push({ id: uid(), branchId: session.branchId, date: $('#e-date').value, category: $('#e-cat').value.trim(), amount: amount, method: $('#e-method').value, note: $('#e-note').value.trim() });
-    saveDB(); toast('تم إضافة المصروف'); viewExpenses(v);
+    if(amount <= 0) return toast('أدخل مبلغاً صحيحاً', 'err');
+    var oldT = totals();
+    db.expenses.push({ id: uid(), branchId: session.branchId, date: $('#e-date').value, category: $('#e-cat').value.trim(), amount: amount, method: $('#e-method').value });
+    saveDB();
+    var newT = totals();
+    logAction('إضافة', 'مصروف', 'النوع: ' + $('#e-cat').value + ' | المبلغ: ' + amount, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    toast('تمت الإضافة'); viewExpenses(v);
   };
   bindDeletes(v);
 }
 
-// ---------------- الدفعات ----------------
 function viewPayments(v){
-  var d = branchData();
-  var rows = d.payments.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-  
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th>الطرف</th><th class="num">المبلغ</th><th>طريقة الدفع</th><th>ملاحظة</th><th></th></tr></thead><tbody>' +
+  var d = branchData(), rows = d.payments.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>النوع</th><th>الطرف</th><th class="num">المبلغ</th><th>الطريقة</th><th></th></tr></thead><tbody>' +
       rows.map(function(x){
-        var payM = x.method === 'bank' ? 'بنك' : 'نقدي';
         return '<tr><td>'+x.date+'</td><td><span class="badge '+(x.direction==='in'?'green':'orange')+'">'+(x.direction==='in'?'قبض':'صرف')+'</span></td>' +
-          '<td>'+esc(x.partyName || '—')+'</td><td class="num">'+money(x.amount)+'</td><td>'+payM+'</td><td>'+esc(x.note || '')+'</td>' +
-          '<td><button class="btn danger sm" data-del="payments" data-id="'+x.id+'">حذف</button></td></tr>';
+          '<td>'+esc(x.partyName || '—')+'</td><td class="num">'+money(x.amount)+'</td><td>'+(x.method==='bank'?'بنك':'نقدي')+'</td>' +
+          '<td><button class="btn danger sm no-print" data-del="payments" data-id="'+x.id+'">حذف</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted">لا توجد دفعات.</p>';
 
   v.innerHTML =
-    '<div class="card"><h3>إضافة دفعة (قبض / صرف)</h3>' +
+    '<div class="card no-print"><h3>إضافة دفعة</h3>' +
       '<form id="f-pay" class="form-grid">' +
         '<label>التاريخ<input type="date" id="p-date" value="'+today()+'" required></label>' +
         '<label>النوع<select id="p-type"><option value="in">قبض من عميل</option><option value="out">صرف لمورد</option></select></label>' +
         '<label>الطرف<select id="p-party"></select></label>' +
         '<label>المبلغ<input type="number" step="0.01" min="0" id="p-amount" required></label>' +
-        '<label>طريقة الدفع<select id="p-method"><option value="cash">الخزينة (نقدي)</option><option value="bank">البنك</option></select></label>' +
-        '<label class="span2">ملاحظة<input id="p-note"></label>' +
-        '<div class="span2"><button class="btn primary" type="submit">إضافة الدفعة</button></div>' +
+        '<label>طريقة الدفع<select id="p-method"><option value="cash">نقدي</option><option value="bank">بنك</option></select></label>' +
+        '<div class="span2"><button class="btn primary" type="submit">إضافة</button></div>' +
       '</form>' +
-    '</div>' +
-    '<div class="card"><h3>الدفعات ('+rows.length+')</h3>' + rowsHtml + '</div>';
+    '</div><div class="card"><h3>الدفعات ('+rows.length+')</h3>' + rowsHtml + '</div>';
 
   var typeSel = $('#p-type'), partySel = $('#p-party');
   function fillParties(){
@@ -623,53 +533,107 @@ function viewPayments(v){
   $('#f-pay').onsubmit = function(e){
     e.preventDefault();
     var amount = num($('#p-amount').value), partyId = partySel.value, method = $('#p-method').value;
-    if(amount <= 0) return toast('أدخل مبلغًا صحيحًا', 'err');
-    if(!partyId) return toast('أضف العميل/المورد أولاً', 'err');
+    if(amount <= 0 || !partyId) return toast('تأكد من البيانات', 'err');
+    
     var party = d.contacts.find(function(c){ return c.id === partyId; });
-    db.payments.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, direction: typeSel.value, partyType: typeSel.value === 'in' ? 'customer' : 'supplier', partyId: partyId, partyName: party ? party.name : '', amount: amount, method: method, note: $('#p-note').value.trim() });
-    saveDB(); toast('تم إضافة الدفعة'); viewPayments(v);
+    var oldT = totals();
+    db.payments.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, direction: typeSel.value, partyType: typeSel.value === 'in' ? 'customer' : 'supplier', partyId: partyId, partyName: party ? party.name : '', amount: amount, method: method });
+    saveDB();
+    var newT = totals();
+    logAction('إضافة', (typeSel.value === 'in' ? 'سند قبض' : 'سند صرف'), 'الطرف: ' + (party ? party.name : '') + ' | المبلغ: ' + amount, oldT.cash, newT.cash, oldT.bank, newT.bank);
+    toast('تمت الإضافة'); viewPayments(v);
   };
   bindDeletes(v);
 }
 
-// ---------------- سجل الحركات (الدفتر) ----------------
-function viewLedger(v){
-  var d = branchData();
-  var ops = [];
-  
-  d.sales.forEach(function(s){ ops.push({ date:s.date, type:'مبيعات', ref:s.customerName, in:s.paid, out:0, method:s.method, desc:'فاتورة بيع' }); });
-  d.purchases.forEach(function(s){ ops.push({ date:s.date, type:'مشتريات', ref:s.supplierName, in:0, out:s.paid, method:s.method, desc:'فاتورة شراء' }); });
-  d.expenses.forEach(function(s){ ops.push({ date:s.date, type:'مصروفات', ref:s.category, in:0, out:s.amount, method:s.method, desc:'مصروف' }); });
-  d.payments.forEach(function(s){ ops.push({ date:s.date, type:'دفعة', ref:s.partyName, in:(s.direction==='in'?s.amount:0), out:(s.direction==='out'?s.amount:0), method:s.method, desc:(s.direction==='in'?'سند قبض':'سند صرف') }); });
-
-  ops.sort(function(a,b){ return b.date.localeCompare(a.date); });
-
-  var rowsHtml = ops.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-      '<th>التاريخ</th><th>نوع الحركة</th><th>البيان</th><th>الطرف/التفاصيل</th><th>الطريقة</th><th class="num" style="color:var(--ok)">داخل (+)</th><th class="num" style="color:var(--danger)">خارج (-)</th>' +
-      '</tr></thead><tbody>' +
-      ops.map(function(o){
-        var methodTxt = o.method === 'bank' ? '<span class="badge purple">بنك</span>' : '<span class="badge gray">نقدي</span>';
-        return '<tr>' +
-          '<td>'+o.date+'</td>' +
-          '<td>'+o.type+'</td>' +
-          '<td>'+esc(o.desc)+'</td>' +
-          '<td>'+esc(o.ref || '—')+'</td>' +
-          '<td>'+methodTxt+'</td>' +
-          '<td class="num" style="color:var(--ok)">'+(o.in>0?money(o.in):'')+'</td>' +
-          '<td class="num" style="color:var(--danger)">'+(o.out>0?money(o.out):'')+'</td>' +
-        '</tr>';
-      }).join('') + '</tbody></table></div>' : '<p class="muted">سجل الحركات فارغ.</p>';
-
-  v.innerHTML = '<div class="card"><h3>سجل الحركات المالي (دفتر اليومية)</h3><p class="muted small">يعرض هذا السجل كل حركة تمت في الفرع مرتبة من الأحدث للأقدم.</p>' + rowsHtml + '</div>';
-}
-
-// ---------------- التقارير (سريعة) ----------------
+// ---------------- التقارير ----------------
 function viewReports(v){
-  // تم تبسيطها هنا للحفاظ على حجم الكود، يمكنك نسخ دالة buildReport القديمة إن أردت التفصيل اليومي.
-  v.innerHTML = '<div class="card"><h3>التقارير</h3><p>استخدم سجل الحركات حالياً للتدقيق، وسنضيف تقارير متقدمة (ميزان المراجعة، الأرباح والخسائر) في التحديث القادم إذا رغبت.</p></div>';
+  var d = branchData();
+  var start = ui.rStart, end = ui.rEnd;
+  
+  if(ui.rType === 'daily'){ start = ui.rDate; end = ui.rDate; }
+  if(ui.rType === 'weekly'){
+    var parts = ui.rDate.split('-');
+    var dt = new Date(parts[0], parts[1]-1, parts[2]);
+    var day = dt.getDay(); // 6=Saturday, 0=Sunday...
+    // إعادة ضبط اليوم إلى السبت (6)
+    var diff = dt.getDate() - day + (day === 6 ? 0 : -6);
+    var sat = new Date(dt.setDate(diff));
+    start = isoLocal(sat);
+    var fri = new Date(sat); fri.setDate(fri.getDate() + 6);
+    end = isoLocal(fri);
+  }
+  if(ui.rType === 'monthly'){
+    var partsM = ui.rMonth.split('-');
+    var y = partsM[0], m = partsM[1];
+    start = y + '-' + m + '-01';
+    var lastDay = new Date(y, m, 0).getDate();
+    end = y + '-' + m + '-' + (lastDay < 10 ? '0'+lastDay : lastDay);
+  }
+
+  // تجميع الحركات
+  var rSales = d.sales.filter(function(x){ return x.date >= start && x.date <= end; });
+  var rPur = d.purchases.filter(function(x){ return x.date >= start && x.date <= end; });
+  var rExp = d.expenses.filter(function(x){ return x.date >= start && x.date <= end; });
+  var rPay = d.payments.filter(function(x){ return x.date >= start && x.date <= end; });
+
+  var totSales = sum(rSales, 'total'), totPur = sum(rPur, 'total'), totExp = sum(rExp, 'amount');
+  var inPay = sum(rPay.filter(function(x){ return x.direction==='in'; }), 'amount');
+  var outPay = sum(rPay.filter(function(x){ return x.direction==='out'; }), 'amount');
+  var cashIn = sum(rSales, 'paid') + inPay;
+  var cashOut = sum(rPur, 'paid') + totExp + outPay;
+
+  // التحكم بالواجهة
+  var controls = '<div class="form-grid no-print">' +
+      '<label>نوع التقرير<select id="r-type">' +
+        '<option value="daily" '+(ui.rType==='daily'?'selected':'')+'>يومي</option>' +
+        '<option value="weekly" '+(ui.rType==='weekly'?'selected':'')+'>أسبوعي (يبدأ من السبت)</option>' +
+        '<option value="monthly" '+(ui.rType==='monthly'?'selected':'')+'>شهري</option>' +
+        '<option value="custom" '+(ui.rType==='custom'?'selected':'')+'>مخصص (من - إلى)</option>' +
+      '</select></label>';
+  
+  if(ui.rType === 'daily') controls += '<label>التاريخ<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
+  if(ui.rType === 'weekly') controls += '<label>تاريخ يوم السبت<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
+  if(ui.rType === 'monthly') controls += '<label>الشهر<input type="month" id="r-month" value="'+ui.rMonth+'"></label>';
+  if(ui.rType === 'custom') controls += '<label>من<input type="date" id="r-start" value="'+ui.rStart+'"></label><label>إلى<input type="date" id="r-end" value="'+ui.rEnd+'"></label>';
+  
+  controls += '<div class="row" style="gap:8px"><button class="btn primary" id="r-apply">عرض</button><button class="btn" id="r-print">طباعة</button></div></div>';
+
+  var periodLabel = (ui.rType === 'daily') ? 'يوم ' + start :
+                    (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الجمعة ' + end :
+                    (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth :
+                    'الفترة من ' + start + ' إلى ' + end;
+
+  v.innerHTML = 
+    printHeader() +
+    '<div class="card">' +
+      '<h3 class="no-print">إنشاء تقرير</h3>' + controls +
+      '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
+      '<div class="grid cards mt">' +
+        stat('إجمالي المبيعات', money(totSales), 'primary') +
+        stat('إجمالي المشتريات', money(totPur), 'warn') +
+        stat('إجمالي المصروفات', money(totExp), 'danger') +
+        stat('المقبوضات النقدية', money(cashIn), 'ok') +
+        stat('المدفوعات النقدية', money(cashOut), 'warn') +
+        stat('صافي الحركة النقدية', money(cashIn - cashOut), 'primary') +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><h3>ملخص فواتير المبيعات</h3>' + 
+      (rSales.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>التاريخ</th><th>العميل</th><th class="num">الإجمالي</th><th class="num">المدفوع</th><th>الطريقة</th></tr></thead><tbody>' +
+        rSales.map(function(s){ return '<tr><td>'+s.date+'</td><td>'+esc(s.customerName)+'</td><td class="num">'+money(s.total)+'</td><td class="num">'+money(s.paid)+'</td><td>'+(s.method==='bank'?'بنك':'نقدي')+'</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted">لا مبيعات في هذه الفترة.</p>') +
+    '</div>';
+
+  $('#r-type').onchange = function(){ ui.rType = this.value; viewReports(v); };
+  $('#r-apply').onclick = function(){
+    if(ui.rType === 'daily' || ui.rType === 'weekly') ui.rDate = $('#r-date').value;
+    if(ui.rType === 'monthly') ui.rMonth = $('#r-month').value;
+    if(ui.rType === 'custom'){ ui.rStart = $('#r-start').value; ui.rEnd = $('#r-end').value; }
+    viewReports(v);
+  };
+  $('#r-print').onclick = function(){ window.print(); };
 }
 
-// ---------------- الديون والعملاء ----------------
+// ---------------- الديون (مع الطباعة) ----------------
 function viewDebts(v){
   var d = branchData();
   var customers = d.contacts.filter(function(c){ return c.type === 'customer'; }).map(function(c){ return { c:c, s:contactStats(c) }; }).filter(function(x){ return x.s.balance !== 0; });
@@ -681,33 +645,53 @@ function viewDebts(v){
       list.map(function(x){ return '<tr><td>'+esc(x.c.name)+'</td><td class="num">'+money(x.s.total)+'</td><td class="num">'+money(x.s.paid)+'</td><td class="num" style="font-weight:900;color:'+(x.s.balance>0?'var(--warn)':'var(--ok)')+'">'+money(x.s.balance)+'</td></tr>'; }).join('') + '</tbody></table></div>';
   }
 
-  v.innerHTML = '<div class="card"><h3>ديون العملاء (لنا)</h3>'+tbl(customers, 'العملاء')+'</div>' +
-                '<div class="card"><h3>ديون الموردين (علينا)</h3>'+tbl(suppliers, 'الموردين')+'</div>';
+  v.innerHTML = 
+    printHeader() +
+    '<div class="card no-print"><button class="btn primary" onclick="window.print()">🖨️ طباعة كشف الديون</button></div>' +
+    '<div class="card"><h3>ديون العملاء (لنا)</h3>'+tbl(customers, 'العملاء')+'</div>' +
+    '<div class="card"><h3>ديون الموردين (علينا)</h3>'+tbl(suppliers, 'الموردين')+'</div>';
 }
 
+// ---------------- سجل التدقيق ----------------
+function viewLedger(v){
+  var logs = (db.auditLogs || []).filter(function(l){ return l.branchId === session.branchId; }).sort(function(a,b){ return b.timestamp - a.timestamp; });
+  var rowsHtml = logs.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th><th class="num">رصيد الخزينة (قبل ← بعد)</th><th class="num">رصيد البنك (قبل ← بعد)</th>' +
+      '</tr></thead><tbody>' +
+      logs.map(function(l){
+        var cashHtml = (l.oldCash === l.newCash) ? '<span class="muted">'+money(l.newCash)+'</span>' : 
+          '<span class="muted">'+money(l.oldCash)+'</span> <br> <b style="color:' + (l.newCash>=l.oldCash?'var(--ok)':'var(--danger)') + '">← ' + money(l.newCash) + '</b>';
+        var bankHtml = (l.oldBank === l.newBank) ? '<span class="muted">'+money(l.newBank)+'</span>' : 
+          '<span class="muted">'+money(l.oldBank)+'</span> <br> <b style="color:' + (l.newBank>=l.oldBank?'var(--ok)':'var(--danger)') + '">← ' + money(l.newBank) + '</b>';
+        var actionBadge = l.action==='إضافة' ? 'green' : l.action==='حذف' ? 'red' : 'orange';
+        return '<tr><td class="small">' + l.dateStr + '</td><td><b>' + esc(l.user) + '</b></td><td><span class="badge ' + actionBadge + '">' + l.action + '</span></td>' +
+          '<td>' + esc(l.entity) + '<br><span class="muted small">' + esc(l.details) + '</span></td><td class="num">' + cashHtml + '</td><td class="num">' + bankHtml + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">سجل التدقيق فارغ.</p>';
+  v.innerHTML = '<div class="card"><h3>سجل الحركات والتدقيق</h3>' + rowsHtml + '</div>';
+}
+
+// ---------------- أطراف ----------------
 function viewContacts(v){
   var d = branchData(), rows = d.contacts;
-  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>الاسم</th><th>النوع</th><th>الهاتف</th><th class="num">الرصيد</th><th></th></tr></thead><tbody>' +
+  var rowsHtml = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>الاسم</th><th>النوع</th><th class="num">الرصيد</th><th></th></tr></thead><tbody>' +
       rows.map(function(c){
         var s = contactStats(c);
-        return '<tr><td>'+esc(c.name)+'</td><td><span class="badge '+(c.type==='customer'?'blue':'purple')+'">'+(c.type==='customer'?'عميل':'مورد')+'</span></td><td>'+esc(c.phone || '—')+'</td><td class="num" style="color:'+(s.balance>0?'var(--warn)':'var(--ok)')+'">'+money(s.balance)+'</td><td><button class="btn danger sm" data-del="contacts" data-id="'+c.id+'">حذف</button></td></tr>';
-      }).join('') + '</tbody></table></div>' : '<p class="muted">لا يوجد عملاء أو موردون بعد.</p>';
+        return '<tr><td>'+esc(c.name)+'</td><td><span class="badge '+(c.type==='customer'?'blue':'purple')+'">'+(c.type==='customer'?'عميل':'مورد')+'</span></td><td class="num" style="color:'+(s.balance>0?'var(--warn)':'var(--ok)')+'">'+money(s.balance)+'</td><td><button class="btn danger sm no-print" data-del="contacts" data-id="'+c.id+'">حذف</button></td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">القائمة فارغة.</p>';
 
-  v.innerHTML = '<div class="card"><h3>إضافة عميل / مورد</h3>' +
-      '<form id="f-contact" class="form-grid">' +
+  v.innerHTML = '<div class="card no-print"><h3>إضافة عميل / مورد</h3><form id="f-contact" class="form-grid">' +
         '<label>النوع<select id="c-type"><option value="customer">عميل</option><option value="supplier">مورد</option></select></label>' +
-        '<label>الاسم<input id="c-name" required></label>' +
-        '<label>الهاتف<input id="c-phone"></label>' +
-        '<div><button class="btn primary" type="submit">إضافة</button></div>' +
-      '</form></div>' +
-    '<div class="card"><h3>القائمة ('+rows.length+')</h3>' + rowsHtml + '</div>';
+        '<label>الاسم<input id="c-name" required></label><div><button class="btn primary" type="submit">إضافة</button></div></form></div>' +
+      '<div class="card"><h3>القائمة ('+rows.length+')</h3>' + rowsHtml + '</div>';
 
   $('#f-contact').onsubmit = function(e){
     e.preventDefault();
-    var name = $('#c-name').value.trim();
+    var name = $('#c-name').value.trim(), type = $('#c-type').value;
     if(!name) return toast('أدخل الاسم', 'err');
-    db.contacts.push({ id: uid(), companyId: session.companyId, branchId: session.branchId, type: $('#c-type').value, name: name, phone: $('#c-phone').value.trim() });
-    saveDB(); toast('تمت الإضافة'); viewContacts(v);
+    db.contacts.push({ id: uid(), companyId: session.companyId, branchId: session.branchId, type: type, name: name });
+    saveDB();
+    logAction('إضافة', (type === 'customer' ? 'عميل' : 'مورد'), 'الاسم: ' + name, null, null, null, null);
+    toast('تمت الإضافة'); viewContacts(v);
   };
   bindDeletes(v);
 }
@@ -715,10 +699,23 @@ function viewContacts(v){
 function bindDeletes(v){
   v.querySelectorAll('[data-del]').forEach(function(btn){
     btn.onclick = function(){
-      if(!confirm('تأكيد الحذف؟')) return;
+      if(!confirm('تأكيد الحذف؟ سيتم تسجيل العملية.')) return;
       var col = btn.dataset.del, id = btn.dataset.id;
+      var item = db[col].find(function(x){ return x.id === id; });
+      if(!item) return;
+      var oldT = totals();
       db[col] = db[col].filter(function(x){ return x.id !== id; });
-      saveDB(); toast('تم الحذف'); renderView();
+      saveDB();
+      var newT = totals();
+      var entityName = col === 'sales' ? 'فاتورة بيع' : col === 'purchases' ? 'فاتورة شراء' : col === 'expenses' ? 'مصروف' : col === 'payments' ? 'دفعة' : 'طرف';
+      var desc = 'حذف سجل سابق';
+      if(col === 'sales') desc = 'عميل: '+(item.customerName||'نقدي')+' | الإجمالي: '+item.total;
+      else if(col === 'purchases') desc = 'مورد: '+(item.supplierName||'نقدي')+' | الإجمالي: '+item.total;
+      else if(col === 'expenses') desc = item.category+' | المبلغ: '+item.amount;
+      else if(col === 'payments') desc = item.partyName+' | المبلغ: '+item.amount;
+      else if(col === 'contacts') desc = item.name;
+      logAction('حذف', entityName, desc, oldT.cash, newT.cash, oldT.bank, newT.bank);
+      toast('تم الحذف'); renderView();
     };
   });
 }
