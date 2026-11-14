@@ -314,8 +314,21 @@ function viewCompanyLogin(){
         '<label>كلمة مرور الشركة<input id="c-pass" type="password" placeholder="••••" required></label>' +
         '<button class="btn primary" type="submit">دخول الشركة</button>' +
       '</form><div id="msg" class="msg"></div>' +
-      '<p class="hint">تجربة: الرمز <b>DEMO</b> — كلمة المرور <b>1234</b></p>' +
+      
+      // إضافة زر إنشاء شركة جديدة
+      '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إنشاء حساب شركة جديدة</summary>' +
+        '<form id="form-company-new" class="stack mt">' +
+          '<label>اسم الشركة<input id="n-name" required></label>' +
+          '<label>رمز الشركة (للدخول)<input id="n-code" placeholder="مثال: ABC" required></label>' +
+          '<label>كلمة المرور<input id="n-pass" type="password" required></label>' +
+          '<label>العملة<input id="n-cur" value="ر.س"></label>' +
+          '<button class="btn" type="submit">إنشاء الشركة</button>' +
+        '</form>' +
+      '</details>' +
+      '<p class="hint">تجربة سريعة: الرمز <b>DEMO</b> — كلمة المرور <b>1234</b></p>' +
     '</div></div>';
+
+  // حدث تسجيل الدخول
   $('#form-company-login').onsubmit = function(e){
     e.preventDefault();
     var code = $('#c-code').value.trim().toUpperCase(), pass = $('#c-pass').value;
@@ -323,8 +336,41 @@ function viewCompanyLogin(){
     if(!c || c.password !== pass) return flash('رمز الشركة أو كلمة المرور غير صحيحة');
     session = { companyId:c.id, branchId:null, userId:null }; saveSession(); render();
   };
-}
 
+  // حدث إنشاء شركة جديدة وحفظها في Neon
+  $('#form-company-new').onsubmit = async function(e){
+    e.preventDefault();
+    var name = $('#n-name').value.trim(), code = $('#n-code').value.trim().toUpperCase(), pass = $('#n-pass').value, cur = $('#n-cur').value.trim() || 'ر.س';
+    if(!name || !code || !pass) return flash('أكمل جميع الحقول');
+    if(db.companies.some(function(c){ return c.code.toUpperCase() === code; })) return flash('رمز الشركة مستخدم مسبقًا');
+    
+    var newCompanyId = uid();
+    var newBranchId = uid();
+    var newUserId = uid();
+
+    var newCompany = { id: newCompanyId, name: name, code: code, password: pass, currency: cur };
+    var newBranch = { id: newBranchId, companyId: newCompanyId, name: 'الفرع الرئيسي', code: '01', cashOpening: 0, bankOpening: 0 };
+    var newUser = { id: newUserId, companyId: newCompanyId, branchId: newBranchId, name: 'مدير النظام', username: 'admin', password: '1234', role: 'مدير' };
+
+    // إضافة للذاكرة المحلية
+    db.companies.push(newCompany);
+    db.users.push(newUser);
+    
+    // البحث عن الشركة وإضافة الفرع لها
+    var compObj = db.companies.find(c => c.id === newCompanyId);
+    if(!compObj.branches) compObj.branches = [];
+    compObj.branches.push(newBranch);
+
+    // الحفظ في قاعدة بيانات Neon
+    await saveToCloud('companies', db.companies);
+    await saveToCloud('branches', [newBranch]);
+    await saveToCloud('users', db.users);
+
+    flash('تم إنشاء الشركة بنجاح — يمكنك الدخول الآن', 'ok');
+    $('#c-code').value = code;
+    $('#form-company-new').reset();
+  };
+}
 function viewBranchSelect(){
   var c = currentCompany();
   var cards = (c.branches || []).map(function(b){
