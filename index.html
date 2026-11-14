@@ -141,14 +141,9 @@ window.addEventListener('error', function(e){ showError((e.message||'') + '\n' +
 
 try {
 var SKEY = 'accsys_session';
-// تهيئة قاعدة البيانات الفارغة (سيتم ملؤها من السحابة)
 var db = { companies:[], users:[], contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: [] };
 var session = loadSession();
-var ui = { 
-  tab:'dashboard', 
-  dailyDate: today(),
-  rType:'weekly', rDate:today(), rStart:today(), rEnd:today(), rMonth:today().slice(0,7) 
-};
+var ui = { tab:'dashboard', dailyDate: today(), rType:'weekly', rDate:today(), rStart:today(), rEnd:today(), rMonth:today().slice(0,7) };
 
 function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
 
@@ -181,16 +176,12 @@ function toast(msg, type){
 function flash(msg, type){ var el = $('#msg'); if(el){ el.textContent = msg; el.className = 'msg ' + (type||'err'); } }
 function stat(label, value, cls){ return '<div class="stat '+(cls||'')+'"><div class="stat-label">'+label+'</div><div class="stat-value">'+value+'</div></div>'; }
 
-// ==========================================
-// دوال الاتصال بالسحابة (Neon + Vercel API)
-// ==========================================
 async function loadDBFromCloud() {
   try {
     const res = await fetch('/api/data');
     if (!res.ok) throw new Error('فشل الاتصال بالخادم');
     const cloudDb = await res.json();
     
-    // تحويل الأسماء من قاعدة البيانات (snake_case) إلى الواجهة (camelCase)
     db.companies = cloudDb.companies.map(c => ({...c, cashOpening: c.cash_opening, bankOpening: c.bank_opening}));
     db.users = cloudDb.users.map(u => ({...u, companyId: u.company_id, branchId: u.branch_id}));
     db.contacts = cloudDb.contacts.map(c => ({...c, companyId: c.company_id, branchId: c.branch_id}));
@@ -200,7 +191,6 @@ async function loadDBFromCloud() {
     db.payments = cloudDb.payments.map(p => ({...p, branchId: p.branch_id, partyId: p.party_id, partyType: p.party_type, partyName: p.party_name}));
     db.auditLogs = cloudDb.auditLogs.map(l => ({...l, branchId: l.branch_id, dateStr: l.date_str, oldCash: l.old_cash, newCash: l.new_cash, oldBank: l.old_bank, newBank: l.new_bank}));
 
-    // إذا كانت قاعدة البيانات فارغة، ننشئ شركة افتراضية للتجربة
     if (db.companies.length === 0) {
       const cid = 'comp_demo';
       const demoCompany = { id: cid, name:'شركة النموذج التجارية', code:'DEMO', password:'1234', currency:'ر.س' };
@@ -211,7 +201,6 @@ async function loadDBFromCloud() {
       db.companies.push(demoCompany);
       db.users.push(demoUser1);
       
-      // حفظ هذه البيانات في السحابة
       await saveToCloud('companies', [demoCompany]);
       await saveToCloud('branches', [demoBranch1, demoBranch2]);
       await saveToCloud('users', [demoUser1]);
@@ -234,7 +223,6 @@ async function saveToCloud(table, dataArray) {
     toast('حدث خطأ أثناء الحفظ في السحابة', 'err');
   }
 }
-// ==========================================
 
 function currentCompany(){ return db.companies.find(function(c){ return c.id===session.companyId; }); }
 function currentBranch(){ var c = currentCompany(); return c && c.branches?.find(function(b){ return b.id===session.branchId; }); }
@@ -315,20 +303,21 @@ function viewCompanyLogin(){
         '<button class="btn primary" type="submit">دخول الشركة</button>' +
       '</form><div id="msg" class="msg"></div>' +
       
-      // إضافة زر إنشاء شركة جديدة
       '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إنشاء حساب شركة جديدة</summary>' +
         '<form id="form-company-new" class="stack mt">' +
           '<label>اسم الشركة<input id="n-name" required></label>' +
           '<label>رمز الشركة (للدخول)<input id="n-code" placeholder="مثال: ABC" required></label>' +
-          '<label>كلمة المرور<input id="n-pass" type="password" required></label>' +
+          '<label>كلمة مرور الشركة<input id="n-pass" type="password" required></label>' +
           '<label>العملة<input id="n-cur" value="ر.س"></label>' +
+          '<hr style="border:0;border-top:1px solid #eee;margin:10px 0">' +
+          '<label>اسم مدير النظام (المستخدم)<input id="n-user" placeholder="مثال: أحمد" required></label>' +
+          '<label>كلمة مرور المدير<input id="n-userpass" type="password" required></label>' +
           '<button class="btn" type="submit">إنشاء الشركة</button>' +
         '</form>' +
       '</details>' +
       '<p class="hint">تجربة سريعة: الرمز <b>DEMO</b> — كلمة المرور <b>1234</b></p>' +
     '</div></div>';
 
-  // حدث تسجيل الدخول
   $('#form-company-login').onsubmit = function(e){
     e.preventDefault();
     var code = $('#c-code').value.trim().toUpperCase(), pass = $('#c-pass').value;
@@ -337,11 +326,12 @@ function viewCompanyLogin(){
     session = { companyId:c.id, branchId:null, userId:null }; saveSession(); render();
   };
 
-  // حدث إنشاء شركة جديدة وحفظها في Neon
   $('#form-company-new').onsubmit = async function(e){
     e.preventDefault();
     var name = $('#n-name').value.trim(), code = $('#n-code').value.trim().toUpperCase(), pass = $('#n-pass').value, cur = $('#n-cur').value.trim() || 'ر.س';
-    if(!name || !code || !pass) return flash('أكمل جميع الحقول');
+    var uName = $('#n-user').value.trim(), uPass = $('#n-userpass').value;
+    
+    if(!name || !code || !pass || !uName || !uPass) return flash('أكمل جميع الحقول');
     if(db.companies.some(function(c){ return c.code.toUpperCase() === code; })) return flash('رمز الشركة مستخدم مسبقًا');
     
     var newCompanyId = uid();
@@ -350,27 +340,24 @@ function viewCompanyLogin(){
 
     var newCompany = { id: newCompanyId, name: name, code: code, password: pass, currency: cur };
     var newBranch = { id: newBranchId, companyId: newCompanyId, name: 'الفرع الرئيسي', code: '01', cashOpening: 0, bankOpening: 0 };
-    var newUser = { id: newUserId, companyId: newCompanyId, branchId: newBranchId, name: 'مدير النظام', username: 'admin', password: '1234', role: 'مدير' };
+    var newUser = { id: newUserId, companyId: newCompanyId, branchId: newBranchId, name: uName, username: uName, password: uPass, role: 'مدير' };
 
-    // إضافة للذاكرة المحلية
     db.companies.push(newCompany);
     db.users.push(newUser);
-    
-    // البحث عن الشركة وإضافة الفرع لها
     var compObj = db.companies.find(c => c.id === newCompanyId);
     if(!compObj.branches) compObj.branches = [];
     compObj.branches.push(newBranch);
 
-    // الحفظ في قاعدة بيانات Neon
-    await saveToCloud('companies', db.companies);
+    await saveToCloud('companies', [newCompany]);
     await saveToCloud('branches', [newBranch]);
-    await saveToCloud('users', db.users);
+    await saveToCloud('users', [newUser]);
 
     flash('تم إنشاء الشركة بنجاح — يمكنك الدخول الآن', 'ok');
     $('#c-code').value = code;
     $('#form-company-new').reset();
   };
 }
+
 function viewBranchSelect(){
   var c = currentCompany();
   var cards = (c.branches || []).map(function(b){
@@ -379,10 +366,31 @@ function viewBranchSelect(){
   root.innerHTML =
     '<div class="auth-wrap"><div class="auth-card wide">' +
       '<div class="topbar"><div><div style="font-weight:900;font-size:17px">'+esc(c.name)+'</div><div class="muted small">اختر الفرع</div></div><button class="btn ghost sm" id="btn-back-company">تغيير الشركة</button></div>' +
-      '<div class="branch-grid">'+cards+'</div><div id="msg" class="msg"></div>' +
+      '<div class="branch-grid">'+cards+'</div>' +
+      
+      '<details class="mt"><summary style="cursor:pointer;font-weight:700;color:var(--primary)">إضافة فرع جديد</summary>' +
+        '<form id="form-branch-new" class="row mt">' +
+          '<input id="b-name" placeholder="اسم الفرع" required style="flex:2;min-width:160px">' +
+          '<input id="b-code" placeholder="رمز الفرع" required style="flex:1;min-width:100px">' +
+          '<button class="btn" type="submit">إضافة</button>' +
+        '</form>' +
+      '</details><div id="msg" class="msg"></div>' +
     '</div></div>';
+    
   root.querySelectorAll('[data-branch]').forEach(function(btn){ btn.onclick = function(){ session.branchId = btn.dataset.branch; session.userId = null; saveSession(); render(); }; });
   $('#btn-back-company').onclick = function(){ session = { companyId:null, branchId:null, userId:null }; saveSession(); render(); };
+  
+  $('#form-branch-new').onsubmit = async function(e){
+    e.preventDefault();
+    var name = $('#b-name').value.trim(), code = $('#b-code').value.trim();
+    if(!name || !code) return flash('أدخل اسم ورمز الفرع');
+    if(c.branches.some(function(b){ return b.code === code; })) return flash('رمز الفرع مستخدم');
+    
+    var newB = { id: uid(), companyId: c.id, name: name, code: code, cashOpening: 0, bankOpening: 0 };
+    c.branches.push(newB);
+    await saveToCloud('branches', [newB]);
+    toast('تم إضافة الفرع'); render();
+  };
 }
 
 function viewUserAuth(){
@@ -390,14 +398,38 @@ function viewUserAuth(){
   root.innerHTML =
     '<div class="auth-wrap"><div class="auth-card">' +
       '<div class="topbar"><div><div style="font-weight:900">'+esc(c.name)+'</div><div class="muted small">'+esc(b.name)+'</div></div><button class="btn ghost sm" id="btn-back-branch">تغيير الفرع</button></div>' +
+      
+      '<div class="tabs"><button class="tab active" data-mode="login">دخول</button><button class="tab" data-mode="register">حساب جديد</button></div>' +
+      
       '<form id="form-user-login" class="stack">' +
         '<label>اسم المستخدم<input id="u-user" autocomplete="off" required></label>' +
         '<label>كلمة المرور<input id="u-pass" type="password" required></label>' +
         '<button class="btn primary" type="submit">دخول</button>' +
-      '</form><div id="msg" class="msg"></div>' +
-      '<p class="hint">تجربة: <b>admin</b> / <b>1234</b></p>' +
+      '</form>' +
+      
+      '<form id="form-user-register" class="stack hidden">' +
+        '<label>الاسم الكامل<input id="r-name" required></label>' +
+        '<label>اسم المستخدم<input id="r-user" autocomplete="off" required></label>' +
+        '<label>كلمة المرور<input id="r-pass" type="password" required></label>' +
+        '<label>الدور<select id="r-role"><option>مدير</option><option>محاسب</option><option>كاشير</option></select></label>' +
+        '<button class="btn" type="submit">إنشاء الحساب</button>' +
+      '</form>' +
+      
+      '<div id="msg" class="msg"></div>' +
     '</div></div>';
+    
+  root.querySelectorAll('[data-mode]').forEach(function(t){
+    t.onclick = function(){
+      root.querySelectorAll('[data-mode]').forEach(function(x){ x.classList.toggle('active', x === t); });
+      var login = t.dataset.mode === 'login';
+      $('#form-user-login').classList.toggle('hidden', !login);
+      $('#form-user-register').classList.toggle('hidden', login);
+      flash('');
+    };
+  });
+
   $('#btn-back-branch').onclick = function(){ session.branchId = null; session.userId = null; saveSession(); render(); };
+  
   $('#form-user-login').onsubmit = function(e){
     e.preventDefault();
     var username = $('#u-user').value.trim(), pass = $('#u-pass').value;
@@ -405,20 +437,25 @@ function viewUserAuth(){
     if(!u || u.password !== pass) return flash('البيانات غير صحيحة');
     session.userId = u.id; saveSession(); render();
   };
+  
+  $('#form-user-register').onsubmit = async function(e){
+    e.preventDefault();
+    var name = $('#r-name').value.trim(), username = $('#r-user').value.trim(), pass = $('#r-pass').value, role = $('#r-role').value;
+    if(!name || !username || !pass) return flash('أكمل جميع الحقول');
+    if(db.users.some(function(u){ return u.branchId === session.branchId && u.username.toLowerCase() === username.toLowerCase(); })) return flash('اسم المستخدم مستخدم مسبقاً');
+    
+    var newUser = { id: uid(), companyId: session.companyId, branchId: session.branchId, name: name, username: username, password: pass, role: role };
+    db.users.push(newUser);
+    await saveToCloud('users', [newUser]);
+    session.userId = newUser.id; saveSession(); render();
+  };
 }
 
 // ---------------- التطبيق الرئيسي ----------------
 var TABS = [
-  ['dashboard','لوحة التحكم'], 
-  ['daily','التقفيلة اليومية'],
-  ['sales','المبيعات'], 
-  ['purchases','المشتريات'],
-  ['expenses','المصروفات'], 
-  ['payments','الدفعات'], 
-  ['debts','الديون'],
-  ['contacts','العملاء والموردون'], 
-  ['reports','التقارير'], 
-  ['ledger','سجل الحركات']
+  ['dashboard','لوحة التحكم'], ['daily','التقفيلة اليومية'], ['sales','المبيعات'], 
+  ['purchases','المشتريات'], ['expenses','المصروفات'], ['payments','الدفعات'], 
+  ['debts','الديون'], ['contacts','العملاء والموردون'], ['reports','التقارير'], ['ledger','سجل الحركات']
 ];
 
 function viewApp(){
@@ -469,14 +506,13 @@ function viewDashboard(v){
     var oldT = totals();
     b.cashOpening = num($('#opening-cash').value);
     b.bankOpening = num($('#opening-bank').value);
-    saveToCloud('branches', currentCompany().branches); // حفظ في السحابة
+    saveToCloud('branches', [b]); // تحديث الفرع في السحابة
     var newT = totals();
     logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية' + ($('#op-note').value?' | ملاحظة: '+$('#op-note').value:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تم الحفظ'); viewDashboard(v);
   };
 }
 
-// ---------------- التقفيلة اليومية ----------------
 function viewDailyClose(v){
   var date = ui.dailyDate;
   var b = currentBranch() || { cashOpening:0, bankOpening:0 };
@@ -504,16 +540,16 @@ function viewDailyClose(v){
   var cashSummaryHtml = 
     '<div class="tbl-wrap"><table class="tbl"><tbody>' +
       '<tr><td>الرصيد المدور من الأمس</td><td class="num"><b>' + money(openCash) + '</b></td></tr>' +
-      '<tr><td>(+) إجمالي المقبوضات اليوم (مبيعات + دفعات)</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
-      '<tr><td>(-) إجمالي المنصرفات اليوم (مشتريات + مصروفات + دفعات)</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
+      '<tr><td>(+) إجمالي المقبوضات اليوم</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
+      '<tr><td>(-) إجمالي المنصرفات اليوم</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
       '<tr style="background:#f8fafd"><td><b>الرصيد المدور الآن (الختامي)</b></td><td class="num"><b style="font-size:16px;color:var(--primary)">' + money(closeCash) + '</b></td></tr>' +
     '</tbody></table></div>';
 
   var bankSummaryHtml = 
     '<div class="tbl-wrap"><table class="tbl"><tbody>' +
       '<tr><td>الرصيد المدور من الأمس</td><td class="num"><b>' + money(openBank) + '</b></td></tr>' +
-      '<tr><td>(+) إجمالي المقبوضات اليوم (مبيعات + دفعات)</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
-      '<tr><td>(-) إجمالي المنصرفات اليوم (مشتريات + مصروفات + دفعات)</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
+      '<tr><td>(+) إجمالي المقبوضات اليوم</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
+      '<tr><td>(-) إجمالي المنصرفات اليوم</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
       '<tr style="background:#f8fafd"><td><b>الرصيد المدور الآن (الختامي)</b></td><td class="num"><b style="font-size:16px;color:#6b3fd4">' + money(closeBank) + '</b></td></tr>' +
     '</tbody></table></div>';
 
@@ -577,7 +613,7 @@ function viewSales(v){
     var c = customers.find(function(x){ return x.id === customerId; });
     var oldT = totals();
     db.sales.push({ id: uid(), branchId: session.branchId, date: $('#s-date').value, customerId: customerId || null, customerName: c ? c.name : 'عميل نقدي', total: total, paid: paid, method: method, note: note });
-    saveToCloud('sales', db.sales); // حفظ في السحابة
+    saveToCloud('sales', db.sales);
     var newT = totals();
     logAction('إضافة', 'فاتورة بيع', 'العميل: ' + (c ? c.name : 'نقدي') + ' | المبلغ: ' + paid + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewSales(v);
@@ -712,7 +748,6 @@ function viewPayments(v){
   bindDeletes(v);
 }
 
-// ---------------- التقارير ----------------
 function viewReports(v){
   var d = branchData();
   var start = ui.rStart, end = ui.rEnd;
@@ -1006,7 +1041,6 @@ function bindDeletes(v){
   });
 }
 
-// نقطة بدء التطبيق
 async function startApp() {
   await loadDBFromCloud();
   document.getElementById('loading-screen').style.display = 'none';
