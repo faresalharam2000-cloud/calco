@@ -30,17 +30,22 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const { table, data } = req.body;
+      const { table, data, action, id } = req.body;
       const allowedTables = ['sales', 'purchases', 'expenses', 'payments', 'contacts', 'users', 'branches', 'companies', 'audit_logs'];
       if (!allowedTables.includes(table)) return res.status(400).json({ error: 'Invalid table name' });
 
+      // ميزة الحذف
+      if (action === 'delete') {
+        await sql(`DELETE FROM ${table} WHERE id = $1`, [id]);
+        return res.status(200).json({ success: true });
+      }
+
+      // الحفظ والتحديث
       if (data && data.length > 0) {
         for (const row of data) {
           const keys = Object.keys(row).map(k => k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
           const values = Object.values(row);
           const placeholders = values.map((_, i) => `$${i + 1}`).join(',');
-          
-          // تحديث السجل إذا كان موجوداً، أو إضافته إذا كان جديداً (Upsert)
           const updates = keys.map((k, i) => `${k} = $${i + 1}`).join(',');
           
           await sql(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${updates}`, values);
