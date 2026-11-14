@@ -38,10 +38,11 @@ input:disabled{background:#f1f3f7;color:#8b95a6}
 .msg.ok{color:var(--ok)}
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
 .branch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
-.branch-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;cursor:pointer;transition:.15s;text-align:center;font-family:inherit}
+.branch-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px 12px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;cursor:pointer;transition:.15s;text-align:center;font-family:inherit;position:relative}
 .branch-card:hover{border-color:var(--primary);box-shadow:0 6px 18px rgba(31,111,235,.12);transform:translateY(-2px)}
 .branch-icon{font-size:26px}
 .branch-name{font-weight:800;color:var(--ink)}
+.del-branch-btn{position:absolute;top:8px;right:8px;color:var(--danger);background:none;border:none;cursor:pointer;font-size:16px;padding:4px;}
 .tabs{display:flex;gap:6px;background:#eef1f7;padding:5px;border-radius:12px;margin-bottom:16px}
 .tab{flex:1;padding:9px;border:0;background:transparent;border-radius:9px;cursor:pointer;font-weight:700;color:var(--muted)}
 .tab.active{background:#fff;color:var(--primary);box-shadow:0 2px 8px rgba(20,40,80,.08)}
@@ -141,7 +142,6 @@ window.addEventListener('error', function(e){ showError((e.message||'') + '\n' +
 
 try {
 var SKEY = 'accsys_session';
-// إضافة مصفوفة الفروع هنا
 var db = { companies:[], branches:[], users:[], contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: [] };
 var session = loadSession();
 var ui = { tab:'dashboard', dailyDate: today(), rType:'weekly', rDate:today(), rStart:today(), rEnd:today(), rMonth:today().slice(0,7) };
@@ -184,9 +184,7 @@ async function loadDBFromCloud() {
     const cloudDb = await res.json();
     
     db.companies = cloudDb.companies.map(c => ({...c, cashOpening: c.cash_opening, bankOpening: c.bank_opening}));
-    // إضافة ربط الفروع هنا
     db.branches = cloudDb.branches.map(b => ({...b, companyId: b.company_id, cashOpening: b.cash_opening, bankOpening: b.bank_opening}));
-    
     db.users = cloudDb.users.map(u => ({...u, companyId: u.company_id, branchId: u.branch_id}));
     db.contacts = cloudDb.contacts.map(c => ({...c, companyId: c.company_id, branchId: c.branch_id}));
     db.sales = cloudDb.sales.map(s => ({...s, branchId: s.branch_id, customerId: s.customer_id, customerName: s.customer_name}));
@@ -200,7 +198,7 @@ async function loadDBFromCloud() {
       const demoCompany = { id: cid, name:'شركة النموذج التجارية', code:'DEMO', password:'1234', currency:'ر.س' };
       const demoBranch1 = { id: 'br_main', companyId: cid, name:'الفرع الرئيسي', code:'01', cashOpening:0, bankOpening:0 };
       const demoBranch2 = { id: 'br_jed', companyId: cid, name:'فرع جدة', code:'02', cashOpening:0, bankOpening:0 };
-      const demoUser1 = { id: 'u1', companyId: cid, branchId:'br_main', name:'مدير النظام', username:'admin', password:'1234', role:'مدير' };
+      const demoUser1 = { id: 'u1', companyId: cid, branchId:'br_main', name:'مدير النظام', username:'admin', password:'1234' };
       
       db.companies.push(demoCompany);
       db.branches.push(demoBranch1, demoBranch2);
@@ -226,6 +224,19 @@ async function saveToCloud(table, dataArray) {
   } catch (error) {
     console.error("Save Error:", error);
     toast('حدث خطأ أثناء الحفظ في السحابة', 'err');
+  }
+}
+
+async function deleteFromCloud(table, id) {
+  try {
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table, action: 'delete', id })
+    });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    toast('حدث خطأ أثناء الحذف', 'err');
   }
 }
 
@@ -344,7 +355,7 @@ function viewCompanyLogin(){
 
     var newCompany = { id: newCompanyId, name: name, code: code, password: pass, currency: cur };
     var newBranch = { id: newBranchId, companyId: newCompanyId, name: 'الفرع الرئيسي', code: '01', cashOpening: 0, bankOpening: 0 };
-    var newUser = { id: newUserId, companyId: newCompanyId, branchId: newBranchId, name: uName, username: uName, password: uPass, role: 'مدير' };
+    var newUser = { id: newUserId, companyId: newCompanyId, branchId: newBranchId, name: uName, username: uName, password: uPass };
 
     db.companies.push(newCompany);
     db.branches.push(newBranch);
@@ -365,7 +376,9 @@ function viewBranchSelect(){
   var myBranches = db.branches.filter(function(b){ return b.companyId === c.id; });
   
   var cards = myBranches.map(function(b){
-    return '<button class="branch-card" data-branch="'+b.id+'"><span class="branch-icon">🏢</span><span class="branch-name">'+esc(b.name)+'</span><span class="muted small">رمز: '+esc(b.code)+'</span></button>';
+    return '<div class="branch-card" data-branch="'+b.id+'">' +
+      '<button class="del-branch-btn no-print" data-delbranch="'+b.id+'" title="حذف الفرع">🗑️</button>' +
+      '<span class="branch-icon">🏢</span><span class="branch-name">'+esc(b.name)+'</span><span class="muted small">رمز: '+esc(b.code)+'</span></div>';
   }).join('');
   
   root.innerHTML =
@@ -382,7 +395,40 @@ function viewBranchSelect(){
       '</details><div id="msg" class="msg"></div>' +
     '</div></div>';
     
-  root.querySelectorAll('[data-branch]').forEach(function(btn){ btn.onclick = function(){ session.branchId = btn.dataset.branch; session.userId = null; saveSession(); render(); }; });
+  root.querySelectorAll('.branch-card').forEach(function(card){ 
+    card.onclick = function(e){ 
+      if(e.target.closest('.del-branch-btn')) return;
+      session.branchId = card.dataset.branch; session.userId = null; saveSession(); render(); 
+    }; 
+  });
+
+  root.querySelectorAll('[data-delbranch]').forEach(function(btn){
+    btn.onclick = async function(e){
+      e.stopPropagation();
+      if(!confirm('تأكيد حذف الفرع وكل بياناته (فواتير، مستخدمين)؟ لا يمكن التراجع.')) return;
+      var bId = btn.dataset.delbranch;
+      
+      db.branches = db.branches.filter(b => b.id !== bId);
+      await deleteFromCloud('branches', bId);
+      // حذف مرتبطات أخرى (اختياري، لكن الأفضل مسح الذاكرة على الأقل)
+      var relatedData = [
+        { table: 'users', arr: db.users },
+        { table: 'sales', arr: db.sales },
+        { table: 'purchases', arr: db.purchases },
+        { table: 'expenses', arr: db.expenses },
+        { table: 'payments', arr: db.payments },
+        { table: 'contacts', arr: db.contacts }
+      ];
+      for (let r of relatedData) {
+        let toDelete = r.arr.filter(x => x.branchId === bId);
+        for (let item of toDelete) { await deleteFromCloud(r.table, item.id); }
+        db[r.table] = r.arr.filter(x => x.branchId !== bId);
+      }
+      
+      toast('تم حذف الفرع'); render();
+    };
+  });
+
   $('#btn-back-company').onclick = function(){ session = { companyId:null, branchId:null, userId:null }; saveSession(); render(); };
   
   $('#form-branch-new').onsubmit = async function(e){
@@ -416,7 +462,6 @@ function viewUserAuth(){
         '<label>الاسم الكامل<input id="r-name" required></label>' +
         '<label>اسم المستخدم<input id="r-user" autocomplete="off" required></label>' +
         '<label>كلمة المرور<input id="r-pass" type="password" required></label>' +
-        '<label>الدور<select id="r-role"><option>مدير</option><option>محاسب</option><option>كاشير</option></select></label>' +
         '<button class="btn" type="submit">إنشاء الحساب</button>' +
       '</form>' +
       
@@ -445,11 +490,11 @@ function viewUserAuth(){
   
   $('#form-user-register').onsubmit = async function(e){
     e.preventDefault();
-    var name = $('#r-name').value.trim(), username = $('#r-user').value.trim(), pass = $('#r-pass').value, role = $('#r-role').value;
+    var name = $('#r-name').value.trim(), username = $('#r-user').value.trim(), pass = $('#r-pass').value;
     if(!name || !username || !pass) return flash('أكمل جميع الحقول');
     if(db.users.some(function(u){ return u.branchId === session.branchId && u.username.toLowerCase() === username.toLowerCase(); })) return flash('اسم المستخدم مستخدم مسبقاً');
     
-    var newUser = { id: uid(), companyId: session.companyId, branchId: session.branchId, name: name, username: username, password: pass, role: role };
+    var newUser = { id: uid(), companyId: session.companyId, branchId: session.branchId, name: name, username: username, password: pass };
     db.users.push(newUser);
     await saveToCloud('users', [newUser]);
     session.userId = newUser.id; saveSession(); render();
@@ -489,21 +534,34 @@ function printHeader() {
   return '<div class="print-only"><h2>' + esc(c.name) + '</h2><h3>فرع: ' + esc(b.name) + '</h3><p>تاريخ الطباعة: ' + new Date().toLocaleString('ar-EG') + '</p></div>';
 }
 
+// ---------------- لوحة التحكم (مع إدارة المستخدمين) ----------------
 function viewDashboard(v){
   var t = totals(), b = currentBranch();
+  var branchUsers = db.users.filter(function(u){ return u.branchId === session.branchId; });
+
+  var usersHtml = branchUsers.map(function(u){
+    return '<tr><td>'+esc(u.name)+'</td><td>'+esc(u.username)+'</td>' +
+      '<td><button class="btn danger sm no-print" data-deluser="'+u.id+'">حذف</button></td></tr>';
+  }).join('');
+
   v.innerHTML =
     '<div class="grid cards">' +
       stat('رصيد الخزينة (النقدي)', money(t.cash), 'ok') +
       stat('رصيد البنك', money(t.bank), 'bank') +
       stat('إجمالي السيولة', money(t.totalLiquidity), 'primary') +
     '</div>' +
-    '<div class="card"><h3>إعدادات الأرصدة الافتتاحية</h3>' +
-      '<form id="form-opening" class="form-grid">' +
-        '<label>الرصيد النقدي الافتتاحي<input type="number" step="0.01" id="opening-cash" value="'+num(b.cashOpening)+'"></label>' +
-        '<label>رصيد البنك الافتتاحي<input type="number" step="0.01" id="opening-bank" value="'+num(b.bankOpening)+'"></label>' +
-        '<label class="span2">ملاحظة التعديل<input id="op-note" placeholder="سبب تعديل الرصيد..."></label>' +
-        '<div class="span2"><button class="btn primary" type="submit">حفظ الأرصدة</button></div>' +
-      '</form>' +
+    '<div class="grid two">' +
+      '<div class="card"><h3>إعدادات الأرصدة الافتتاحية</h3>' +
+        '<form id="form-opening" class="form-grid">' +
+          '<label>الرصيد النقدي الافتتاحي<input type="number" step="0.01" id="opening-cash" value="'+num(b.cashOpening)+'"></label>' +
+          '<label>رصيد البنك الافتتاحي<input type="number" step="0.01" id="opening-bank" value="'+num(b.bankOpening)+'"></label>' +
+          '<label class="span2">ملاحظة التعديل<input id="op-note" placeholder="سبب تعديل الرصيد..."></label>' +
+          '<div class="span2"><button class="btn primary" type="submit">حفظ الأرصدة</button></div>' +
+        '</form>' +
+      '</div>' +
+      '<div class="card"><h3>إدارة المستخدمين (الفرع الحالي)</h3>' +
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>الاسم</th><th>المستخدم</th><th></th></tr></thead><tbody>'+usersHtml+'</tbody></table></div>' +
+      '</div>' +
     '</div>';
 
   $('#form-opening').onsubmit = function(e){
@@ -516,62 +574,103 @@ function viewDashboard(v){
     logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية' + ($('#op-note').value?' | ملاحظة: '+$('#op-note').value:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تم الحفظ'); viewDashboard(v);
   };
+
+  v.querySelectorAll('[data-deluser]').forEach(function(btn){
+    btn.onclick = async function(){
+      if(!confirm('تأكيد حذف هذا المستخدم؟')) return;
+      var uId = btn.dataset.deluser;
+      db.users = db.users.filter(u => u.id !== uId);
+      await deleteFromCloud('users', uId);
+      toast('تم حذف المستخدم'); viewDashboard(v);
+    };
+  });
 }
 
+// ---------------- التقفيلة اليومية (تفصيلي) ----------------
 function viewDailyClose(v){
   var date = ui.dailyDate;
   var b = currentBranch() || { cashOpening:0, bankOpening:0 };
   var openCash = num(b.cashOpening), openBank = num(b.bankOpening);
 
+  // 1. حساب الرصيد قبل اليوم
   db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank += num(x.paid); else openCash += num(x.paid); }});
   db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank -= num(x.paid); else openCash -= num(x.paid); }});
   db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank -= num(x.amount); else openCash -= num(x.amount); }});
   db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') openBank += val; else openCash += val; } else { if(x.method === 'bank') openBank -= val; else openCash -= val; } }});
 
-  var sCash=0, sBank=0, pCash=0, pBank=0, eCash=0, eBank=0, inCash=0, inBank=0, outCash=0, outBank=0;
-  db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') sBank += num(x.paid); else sCash += num(x.paid); }});
-  db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') pBank += num(x.paid); else pCash += num(x.paid); }});
-  db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') eBank += num(x.amount); else eCash += num(x.amount); }});
-  db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') inBank += val; else inCash += val; } else { if(x.method === 'bank') outBank += val; else outCash += val; } }});
+  // 2. جلب حركات اليوم بالتفصيل
+  var cashOps = [], bankOps = [];
+  var tsBase = new Date(date + 'T00:00:00').getTime();
+  
+  db.sales.forEach(function(x){ 
+    if(x.branchId === session.branchId && x.date === date) { 
+      var op = { ts: tsBase + Math.random(), type: 'بيع', name: x.customerName, in: num(x.paid), out: 0 };
+      if(x.method === 'bank') bankOps.push(op); else cashOps.push(op);
+    }
+  });
+  db.purchases.forEach(function(x){ 
+    if(x.branchId === session.branchId && x.date === date) { 
+      var op = { ts: tsBase + Math.random(), type: 'شراء', name: x.supplierName, in: 0, out: num(x.paid) };
+      if(x.method === 'bank') bankOps.push(op); else cashOps.push(op);
+    }
+  });
+  db.expenses.forEach(function(x){ 
+    if(x.branchId === session.branchId && x.date === date) { 
+      var op = { ts: tsBase + Math.random(), type: 'مصروف', name: x.category, in: 0, out: num(x.amount) };
+      if(x.method === 'bank') bankOps.push(op); else cashOps.push(op);
+    }
+  });
+  db.payments.forEach(function(x){ 
+    if(x.branchId === session.branchId && x.date === date) { 
+      var op = { ts: tsBase + Math.random(), type: x.direction === 'in' ? 'قبض' : 'صرف', name: x.partyName, in: x.direction === 'in' ? num(x.amount) : 0, out: x.direction === 'out' ? num(x.amount) : 0 };
+      if(x.method === 'bank') bankOps.push(op); else cashOps.push(op);
+    }
+  });
 
-  var totalInCash = sCash + inCash;
-  var totalOutCash = pCash + eCash + outCash;
-  var closeCash = openCash + totalInCash - totalOutCash;
+  cashOps.sort(function(a,b){ return a.ts - b.ts; });
+  bankOps.sort(function(a,b){ return a.ts - b.ts; });
 
-  var totalInBank = sBank + inBank;
-  var totalOutBank = pBank + eBank + outBank;
-  var closeBank = openBank + totalInBank - totalOutBank;
-
-  var cashSummaryHtml = 
-    '<div class="tbl-wrap"><table class="tbl"><tbody>' +
-      '<tr><td>الرصيد المدور من الأمس</td><td class="num"><b>' + money(openCash) + '</b></td></tr>' +
-      '<tr><td>(+) إجمالي المقبوضات اليوم</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
-      '<tr><td>(-) إجمالي المنصرفات اليوم</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
-      '<tr style="background:#f8fafd"><td><b>الرصيد المدور الآن (الختامي)</b></td><td class="num"><b style="font-size:16px;color:var(--primary)">' + money(closeCash) + '</b></td></tr>' +
-    '</tbody></table></div>';
-
-  var bankSummaryHtml = 
-    '<div class="tbl-wrap"><table class="tbl"><tbody>' +
-      '<tr><td>الرصيد المدور من الأمس</td><td class="num"><b>' + money(openBank) + '</b></td></tr>' +
-      '<tr><td>(+) إجمالي المقبوضات اليوم</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
-      '<tr><td>(-) إجمالي المنصرفات اليوم</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
-      '<tr style="background:#f8fafd"><td><b>الرصيد المدور الآن (الختامي)</b></td><td class="num"><b style="font-size:16px;color:#6b3fd4">' + money(closeBank) + '</b></td></tr>' +
-    '</tbody></table></div>';
+  // 3. بناء الجدول
+  function buildTable(ops, startBal) {
+    if(ops.length === 0) return '<p class="muted mt">لا توجد حركات في هذا اليوم.</p>';
+    var running = startBal;
+    var rows = ops.map(function(o){
+      running += (o.in - o.out);
+      return '<tr>' +
+        '<td><span class="badge '+(o.in>0?'green':'red')+'">'+o.type+'</span></td>' +
+        '<td>'+esc(o.name || '-')+'</td>' +
+        '<td class="num" style="color:var(--ok)">'+(o.in ? money(o.in) : '-')+'</td>' +
+        '<td class="num" style="color:var(--danger)">'+(o.out ? money(o.out) : '-')+'</td>' +
+        '<td class="num" style="font-weight:bold">'+money(running)+'</td>' +
+      '</tr>';
+    }).join('');
+    
+    return '<div class="tbl-wrap mt"><table class="tbl"><thead><tr><th>العملية</th><th>البيان (الطرف)</th><th class="num">مدين (+)</th><th class="num">دائن (-)</th><th class="num">الرصيد المدور</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
 
   v.innerHTML = 
     printHeader() +
     '<div class="card no-print">' +
-      '<h3>اختر التاريخ لعرض الإغلاق اليومي</h3>' +
+      '<h3>اختر التاريخ لعرض الإغلاق اليومي التفصيلي</h3>' +
       '<div class="row">' +
         '<input type="date" id="daily-date" value="' + date + '" style="max-width:200px">' +
         '<button class="btn primary" id="btn-daily-view">عرض</button>' +
         '<button class="btn" onclick="window.print()">🖨️ طباعة</button>' +
       '</div>' +
     '</div>' +
-    '<div class="print-only"><h3>تقرير الإغلاق اليومي ليوم: ' + date + '</h3></div>' +
+    '<div class="print-only"><h3>تقرير الإغلاق اليومي التفصيلي ليوم: ' + date + '</h3></div>' +
+    
     '<div class="grid two">' +
-      '<div class="card"><h3>حركة الخزينة (النقدي)</h3>' + cashSummaryHtml + '</div>' +
-      '<div class="card"><h3>حركة البنك</h3>' + bankSummaryHtml + '</div>' +
+      '<div class="card">' +
+        '<h3 style="color:var(--ok)">حركة الخزينة (النقدي)</h3>' +
+        '<p>الرصيد المدور من الأمس: <b>' + money(openCash) + '</b></p>' +
+        buildTable(cashOps, openCash) +
+      '</div>' +
+      '<div class="card">' +
+        '<h3 style="color:#6b3fd4">حركة البنك</h3>' +
+        '<p>الرصيد المدور من الأمس: <b>' + money(openBank) + '</b></p>' +
+        buildTable(bankOps, openBank) +
+      '</div>' +
     '</div>';
 
   $('#btn-daily-view').onclick = function(){
@@ -580,6 +679,207 @@ function viewDailyClose(v){
   };
 }
 
+// ---------------- التقارير (أسبوعي وشهري) ----------------
+function viewReports(v){
+  var d = branchData();
+  var start = ui.rStart, end = ui.rEnd;
+  
+  if(ui.rType === 'daily'){ start = ui.rDate; end = ui.rDate; }
+  if(ui.rType === 'weekly'){
+    var parts = ui.rDate.split('-');
+    var dt = new Date(parts[0], parts[1]-1, parts[2]);
+    var day = dt.getDay(); 
+    var diff = dt.getDate() - day + (day === 6 ? 0 : -6);
+    var sat = new Date(dt.setDate(diff));
+    start = isoLocal(sat);
+    var thu = new Date(sat); thu.setDate(thu.getDate() + 5);
+    end = isoLocal(thu);
+  }
+  if(ui.rType === 'monthly'){
+    var partsM = ui.rMonth.split('-');
+    var y = partsM[0], m = partsM[1];
+    start = y + '-' + m + '-01';
+    var lastDay = new Date(y, m, 0).getDate();
+    end = y + '-' + m + '-' + (lastDay < 10 ? '0'+lastDay : lastDay);
+  }
+
+  var controls = '<div class="form-grid no-print">' +
+      '<label>نوع التقرير<select id="r-type">' +
+        '<option value="daily" '+(ui.rType==='daily'?'selected':'')+'>يومي</option>' +
+        '<option value="weekly" '+(ui.rType==='weekly'?'selected':'')+'>أسبوعي (السبت إلى الخميس)</option>' +
+        '<option value="monthly" '+(ui.rType==='monthly'?'selected':'')+'>شهري (بالأسابيع)</option>' +
+        '<option value="custom" '+(ui.rType==='custom'?'selected':'')+'>مخصص</option>' +
+      '</select></label>';
+  if(ui.rType === 'daily') controls += '<label>التاريخ<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
+  if(ui.rType === 'weekly') controls += '<label>تاريخ يوم السبت<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
+  if(ui.rType === 'monthly') controls += '<label>الشهر<input type="month" id="r-month" value="'+ui.rMonth+'"></label>';
+  if(ui.rType === 'custom') controls += '<label>من<input type="date" id="r-start" value="'+ui.rStart+'"></label><label>إلى<input type="date" id="r-end" value="'+ui.rEnd+'"></label>';
+  
+  controls += '<div class="row" style="gap:8px"><button class="btn primary" id="r-apply" type="button">عرض التقرير</button><button class="btn" id="r-print" type="button">طباعة</button></div></div>';
+
+  var periodLabel = (ui.rType === 'daily') ? 'يوم ' + start :
+                    (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الخميس ' + end :
+                    (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth : 'الفترة من ' + start + ' إلى ' + end;
+
+  var b = currentBranch() || { cashOpening:0, bankOpening:0 };
+  var prevCash = num(b.cashOpening), prevBank = num(b.bankOpening);
+  
+  // حساب الرصيد قبل بداية الفترة المحددة
+  db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank += num(x.paid); else prevCash += num(x.paid); }});
+  db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank -= num(x.paid); else prevCash -= num(x.paid); }});
+  db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank -= num(x.amount); else prevCash -= num(x.amount); }});
+  db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') prevBank += val; else prevCash += val; } else { if(x.method === 'bank') prevBank -= val; else prevCash -= val; } }});
+
+  // تجهيز فترات الأسابيع (للتقرير الأسبوعي والشهري)
+  var periods = [];
+  if (ui.rType === 'weekly') {
+    periods.push({ start: start, end: end, label: 'الأسبوع من ' + start + ' إلى ' + end });
+  } else if (ui.rType === 'monthly') {
+    var cur = new Date(start + 'T00:00:00');
+    var endD = new Date(end + 'T00:00:00');
+    var weekNum = 1;
+    while(cur <= endD) {
+      var wEnd = new Date(cur);
+      wEnd.setDate(wEnd.getDate() + 6); // 7 أيام
+      if(wEnd > endD) wEnd = endD;
+      periods.push({ start: isoLocal(cur), end: isoLocal(wEnd), label: 'الأسبوع ' + weekNum + ' (' + isoLocal(cur) + ' إلى ' + isoLocal(wEnd) + ')' });
+      cur.setDate(cur.getDate() + 7);
+      weekNum++;
+    }
+  } else if (ui.rType === 'custom') {
+    // للمخصص نعرض الفترة كأسبوع واحد
+    periods.push({ start: start, end: end, label: 'الفترة المحددة' });
+  }
+
+  if (periods.length > 0) {
+    var runningCash = prevCash;
+    var runningBank = prevBank;
+    var totalInCash=0, totalOutCash=0, totalInBank=0, totalOutBank=0;
+    var rowsHtml = '';
+
+    periods.forEach(function(p) {
+      var inCash=0, outCash=0, inBank=0, outBank=0;
+      
+      db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date >= p.start && x.date <= p.end) { if(x.method === 'bank') inBank += num(x.paid); else inCash += num(x.paid); }});
+      db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date >= p.start && x.date <= p.end && x.direction === 'in') { if(x.method === 'bank') inBank += num(x.amount); else inCash += num(x.amount); }});
+      
+      db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date >= p.start && x.date <= p.end) { if(x.method === 'bank') outBank += num(x.paid); else outCash += num(x.paid); }});
+      db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date >= p.start && x.date <= p.end) { if(x.method === 'bank') outBank += num(x.amount); else outCash += num(x.amount); }});
+      db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date >= p.start && x.date <= p.end && x.direction === 'out') { if(x.method === 'bank') outBank += num(x.amount); else outCash += num(x.amount); }});
+
+      totalInCash += inCash; totalOutCash += outCash;
+      totalInBank += inBank; totalOutBank += outBank;
+      
+      runningCash += (inCash - outCash);
+      runningBank += (inBank - outBank);
+
+      var isLast = (p === periods[periods.length - 1]);
+      var balCashStyle = isLast ? 'color:var(--primary);font-weight:bold;font-size:14px' : 'font-weight:bold';
+      var balBankStyle = isLast ? 'color:#6b3fd4;font-weight:bold;font-size:14px' : 'font-weight:bold';
+
+      rowsHtml += '<tr' + (isLast ? ' style="background:#fef9e7"' : '') + '>' +
+          '<td>' + p.label + '</td>' +
+          '<td class="num" style="color:var(--ok)">' + (inCash ? money(inCash) : '-') + '</td>' +
+          '<td class="num" style="color:var(--danger)">' + (outCash ? money(outCash) : '-') + '</td>' +
+          '<td class="num" style="'+balCashStyle+'">' + money(runningCash) + '</td>' +
+          '<td class="num" style="color:var(--ok)">' + (inBank ? money(inBank) : '-') + '</td>' +
+          '<td class="num" style="color:var(--danger)">' + (outBank ? money(outBank) : '-') + '</td>' +
+          '<td class="num" style="'+balBankStyle+'">' + money(runningBank) + '</td>' +
+      '</tr>';
+    });
+
+    v.innerHTML = 
+      printHeader() +
+      '<div class="card">' +
+        '<h3 class="no-print">تقرير الأرباح (مفصول بالأسابيع)</h3>' + controls +
+        '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
+        
+        '<div class="grid two mt">' +
+          '<div class="card" style="border-top:4px solid var(--ok);box-shadow:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)">' +
+            '<h3 style="color:var(--ok)">الخزينة (النقدي)</h3>' +
+            '<div class="tbl-wrap"><table class="tbl"><tbody>' +
+              '<tr><td>الرصيد المدور السابق</td><td class="num"><b>' + money(prevCash) + '</b></td></tr>' +
+              '<tr><td>إجمالي ما استلمناه</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
+              '<tr><td>إجمالي ما دفعناه</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
+              '<tr style="background:#f8fafd"><td><b>صافي أرباح الفترة</b></td><td class="num"><b style="font-size:16px;color:var(--primary)">' + money(totalInCash - totalOutCash) + '</b></td></tr>' +
+            '</tbody></table></div>' +
+          '</div>' +
+          '<div class="card" style="border-top:4px solid #6b3fd4;box-shadow:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)">' +
+            '<h3 style="color:#6b3fd4">البنك</h3>' +
+            '<div class="tbl-wrap"><table class="tbl"><tbody>' +
+              '<tr><td>الرصيد المدور السابق</td><td class="num"><b>' + money(prevBank) + '</b></td></tr>' +
+              '<tr><td>إجمالي ما استلمناه</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
+              '<tr><td>إجمالي ما دفعناه</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
+              '<tr style="background:#f8fafd"><td><b>صافي أرباح الفترة</b></td><td class="num"><b style="font-size:16px;color:#6b3fd4">' + money(totalInBank - totalOutBank) + '</b></td></tr>' +
+            '</tbody></table></div>' +
+          '</div>' +
+        '</div>' +
+        
+        '<div class="tbl-wrap mt"><table class="tbl">' +
+          '<thead><tr>' +
+            '<th rowspan="2" style="vertical-align:middle">الفترة</th>' +
+            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc;background:#e9f7ef;color:#0b7a45">الخزينة (النقدي)</th>' +
+            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc;background:#f0e8ff;color:#6b3fd4">البنك</th>' +
+          '</tr><tr>' +
+            '<th class="num" style="background:#e9f7ef;color:#0b7a45">ما استلمناه</th><th class="num" style="background:#e9f7ef;color:#0b7a45">ما دفعناه</th><th class="num" style="background:#e9f7ef;color:#0b7a45">الرصيد المدور</th>' +
+            '<th class="num" style="background:#f0e8ff;color:#6b3fd4">ما استلمناه</th><th class="num" style="background:#f0e8ff;color:#6b3fd4">ما دفعناه</th><th class="num" style="background:#f0e8ff;color:#6b3fd4">الرصيد المدور</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rowsHtml + '</tbody>' +
+          '<tfoot>' +
+            '<tr style="background:#eef1f7">' +
+              '<td><b>الإجمالي</b></td>' +
+              '<td class="num" style="color:var(--ok)"><b>' + money(totalInCash) + '</b></td>' +
+              '<td class="num" style="color:var(--danger)"><b>' + money(totalOutCash) + '</b></td>' +
+              '<td class="num"><b>-</b></td>' +
+              '<td class="num" style="color:var(--ok)"><b>' + money(totalInBank) + '</b></td>' +
+              '<td class="num" style="color:var(--danger)"><b>' + money(totalOutBank) + '</b></td>' +
+              '<td class="num"><b>-</b></td>' +
+            '</tr>' +
+          '</tfoot>' +
+        '</table></div>' +
+      '</div>';
+
+  } else {
+    // تقرير يومي أو مخصص (شاشة مبسطة)
+    var rSales = d.sales.filter(function(x){ return x.date >= start && x.date <= end; });
+    var rPur = d.purchases.filter(function(x){ return x.date >= start && x.date <= end; });
+    var rExp = d.expenses.filter(function(x){ return x.date >= start && x.date <= end; });
+
+    var sCash = sum(rSales.filter(function(x){return x.method==='cash';}), 'paid');
+    var sBank = sum(rSales.filter(function(x){return x.method==='bank';}), 'paid');
+    var pCash = sum(rPur.filter(function(x){return x.method==='cash';}), 'paid');
+    var pBank = sum(rPur.filter(function(x){return x.method==='bank';}), 'paid');
+    var eCash = sum(rExp.filter(function(x){return x.method==='cash';}), 'amount');
+    var eBank = sum(rExp.filter(function(x){return x.method==='bank';}), 'amount');
+
+    v.innerHTML = 
+      printHeader() +
+      '<div class="card">' +
+        '<h3 class="no-print">إنشاء تقرير</h3>' + controls +
+        '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
+        '<div class="grid cards mt">' +
+          stat('مبيعات نقدية', money(sCash), 'ok') +
+          stat('مبيعات بنكية', money(sBank), 'bank') +
+          stat('مشتريات نقدية', money(pCash), 'warn') +
+          stat('مشتريات بنكية', money(pBank), 'warn') +
+          stat('مصروفات نقدية', money(eCash), 'danger') +
+          stat('مصروفات بنكية', money(eBank), 'danger') +
+        '</div>' +
+      '</div>';
+  }
+
+  $('#r-type').onchange = function(){ ui.rType = this.value; viewReports(v); };
+  $('#r-apply').onclick = function(){
+    if(ui.rType === 'daily' || ui.rType === 'weekly') { var val = $('#r-date').value; if(val) ui.rDate = val; }
+    if(ui.rType === 'monthly') { var valM = $('#r-month').value; if(valM) ui.rMonth = valM; }
+    if(ui.rType === 'custom'){ var s = $('#r-start').value, e = $('#r-end').value; if(s) ui.rStart = s; if(e) ui.rEnd = e; }
+    viewReports(v);
+  };
+  $('#r-print').onclick = function(){ window.print(); };
+}
+
+// ---------------- باقي الشاشات (مبيعات، مشتريات، مصروفات، دفعات، ديون، أطراف، سجل) ----------------
+// (نفس الكود السابق دون تغيير، لضمان عدم تضخم الرد، لكنها موجودة كاملة)
 function viewSales(v){
   var d = branchData(), customers = d.contacts.filter(function(c){ return c.type === 'customer'; });
   var rows = d.sales.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
@@ -753,196 +1053,6 @@ function viewPayments(v){
   bindDeletes(v);
 }
 
-function viewReports(v){
-  var d = branchData();
-  var start = ui.rStart, end = ui.rEnd;
-  
-  if(ui.rType === 'daily'){ start = ui.rDate; end = ui.rDate; }
-  if(ui.rType === 'weekly'){
-    var parts = ui.rDate.split('-');
-    var dt = new Date(parts[0], parts[1]-1, parts[2]);
-    var day = dt.getDay(); 
-    var diff = dt.getDate() - day + (day === 6 ? 0 : -6);
-    var sat = new Date(dt.setDate(diff));
-    start = isoLocal(sat);
-    var thu = new Date(sat); thu.setDate(thu.getDate() + 5);
-    end = isoLocal(thu);
-  }
-  if(ui.rType === 'monthly'){
-    var partsM = ui.rMonth.split('-');
-    var y = partsM[0], m = partsM[1];
-    start = y + '-' + m + '-01';
-    var lastDay = new Date(y, m, 0).getDate();
-    end = y + '-' + m + '-' + (lastDay < 10 ? '0'+lastDay : lastDay);
-  }
-
-  var controls = '<div class="form-grid no-print">' +
-      '<label>نوع التقرير<select id="r-type">' +
-        '<option value="daily" '+(ui.rType==='daily'?'selected':'')+'>يومي</option>' +
-        '<option value="weekly" '+(ui.rType==='weekly'?'selected':'')+'>أسبوعي (السبت إلى الخميس)</option>' +
-        '<option value="monthly" '+(ui.rType==='monthly'?'selected':'')+'>شهري</option>' +
-        '<option value="custom" '+(ui.rType==='custom'?'selected':'')+'>مخصص</option>' +
-      '</select></label>';
-  if(ui.rType === 'daily') controls += '<label>التاريخ<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
-  if(ui.rType === 'weekly') controls += '<label>تاريخ يوم السبت<input type="date" id="r-date" value="'+ui.rDate+'"></label>';
-  if(ui.rType === 'monthly') controls += '<label>الشهر<input type="month" id="r-month" value="'+ui.rMonth+'"></label>';
-  if(ui.rType === 'custom') controls += '<label>من<input type="date" id="r-start" value="'+ui.rStart+'"></label><label>إلى<input type="date" id="r-end" value="'+ui.rEnd+'"></label>';
-  
-  controls += '<div class="row" style="gap:8px"><button class="btn primary" id="r-apply" type="button">عرض التقرير</button><button class="btn" id="r-print" type="button">طباعة</button></div></div>';
-
-  var periodLabel = (ui.rType === 'daily') ? 'يوم ' + start :
-                    (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الخميس ' + end :
-                    (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth : 'الفترة من ' + start + ' إلى ' + end;
-
-  if (ui.rType === 'weekly') {
-    var b = currentBranch() || { cashOpening:0, bankOpening:0 };
-    
-    var prevCash = num(b.cashOpening), prevBank = num(b.bankOpening);
-    db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank += num(x.paid); else prevCash += num(x.paid); }});
-    db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank -= num(x.paid); else prevCash -= num(x.paid); }});
-    db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank -= num(x.amount); else prevCash -= num(x.amount); }});
-    db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') prevBank += val; else prevCash += val; } else { if(x.method === 'bank') prevBank -= val; else prevCash -= val; } }});
-
-    var dailyData = [];
-    var daysNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-    var tempDate = new Date(start + 'T00:00:00');
-    
-    var totalInCash = 0, totalOutCash = 0, totalInBank = 0, totalOutBank = 0;
-    var runningCash = prevCash;
-    var runningBank = prevBank;
-
-    for (var i = 0; i < 6; i++) {
-        var currentDate = isoLocal(tempDate);
-        var dayName = daysNames[tempDate.getDay()];
-        
-        var inCash=0, outCash=0, inBank=0, outBank=0;
-        
-        db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate) { if(x.method === 'bank') inBank += num(x.paid); else inCash += num(x.paid); }});
-        db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate && x.direction === 'in') { if(x.method === 'bank') inBank += num(x.amount); else inCash += num(x.amount); }});
-        
-        db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate) { if(x.method === 'bank') outBank += num(x.paid); else outCash += num(x.paid); }});
-        db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate) { if(x.method === 'bank') outBank += num(x.amount); else outCash += num(x.amount); }});
-        db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate && x.direction === 'out') { if(x.method === 'bank') outBank += num(x.amount); else outCash += num(x.amount); }});
-
-        totalInCash += inCash; totalOutCash += outCash;
-        totalInBank += inBank; totalOutBank += outBank;
-        
-        runningCash += (inCash - outCash);
-        runningBank += (inBank - outBank);
-
-        dailyData.push({
-            date: currentDate, day: dayName,
-            inCash: inCash, outCash: outCash, balanceCash: runningCash,
-            inBank: inBank, outBank: outBank, balanceBank: runningBank
-        });
-        tempDate.setDate(tempDate.getDate() + 1);
-    }
-
-    var rowsHtml = dailyData.map(function(d){
-        var isThursday = (d.day === 'الخميس');
-        var balanceTextCash = isThursday ? '<span style="color:var(--primary);font-weight:bold;font-size:14px">' + money(d.balanceCash) + ' <br><small>(الرصيد المدور الآن)</small></span>' : money(d.balanceCash);
-        var balanceTextBank = isThursday ? '<span style="color:#6b3fd4;font-weight:bold;font-size:14px">' + money(d.balanceBank) + ' <br><small>(الرصيد المدور الآن)</small></span>' : money(d.balanceBank);
-        
-        return '<tr' + (isThursday ? ' style="background:#fef9e7"' : '') + '>' +
-            '<td>' + d.day + '<br><span class="muted small">' + d.date + '</span></td>' +
-            '<td class="num" style="color:var(--ok)">' + (d.inCash ? money(d.inCash) : '-') + '</td>' +
-            '<td class="num" style="color:var(--danger)">' + (d.outCash ? money(d.outCash) : '-') + '</td>' +
-            '<td class="num" style="font-weight:bold">' + balanceTextCash + '</td>' +
-            '<td class="num" style="color:var(--ok)">' + (d.inBank ? money(d.inBank) : '-') + '</td>' +
-            '<td class="num" style="color:var(--danger)">' + (d.outBank ? money(d.outBank) : '-') + '</td>' +
-            '<td class="num" style="font-weight:bold">' + balanceTextBank + '</td>' +
-        '</tr>';
-    }).join('');
-
-    v.innerHTML = 
-      printHeader() +
-      '<div class="card">' +
-        '<h3 class="no-print">تقرير الأرباح الأسبوعي (مفصول)</h3>' + controls +
-        '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
-        
-        '<div class="grid two mt">' +
-          '<div class="card" style="border-top:4px solid var(--ok);box-shadow:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)">' +
-            '<h3 style="color:var(--ok)">الخزينة (النقدي)</h3>' +
-            '<div class="tbl-wrap"><table class="tbl"><tbody>' +
-              '<tr><td>الرصيد المدور من الأسبوع الماضي</td><td class="num"><b>' + money(prevCash) + '</b></td></tr>' +
-              '<tr><td>إجمالي ما استلمناه</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
-              '<tr><td>إجمالي ما دفعناه</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
-              '<tr style="background:#f8fafd"><td><b>صافي أرباح الأسبوع</b></td><td class="num"><b style="font-size:16px;color:var(--primary)">' + money(totalInCash - totalOutCash) + '</b></td></tr>' +
-            '</tbody></table></div>' +
-          '</div>' +
-          '<div class="card" style="border-top:4px solid #6b3fd4;box-shadow:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)">' +
-            '<h3 style="color:#6b3fd4">البنك</h3>' +
-            '<div class="tbl-wrap"><table class="tbl"><tbody>' +
-              '<tr><td>الرصيد المدور من الأسبوع الماضي</td><td class="num"><b>' + money(prevBank) + '</b></td></tr>' +
-              '<tr><td>إجمالي ما استلمناه</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
-              '<tr><td>إجمالي ما دفعناه</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
-              '<tr style="background:#f8fafd"><td><b>صافي أرباح الأسبوع</b></td><td class="num"><b style="font-size:16px;color:#6b3fd4">' + money(totalInBank - totalOutBank) + '</b></td></tr>' +
-            '</tbody></table></div>' +
-          '</div>' +
-        '</div>' +
-        
-        '<div class="tbl-wrap mt"><table class="tbl">' +
-          '<thead><tr>' +
-            '<th rowspan="2" style="vertical-align:middle">اليوم</th>' +
-            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc;background:#e9f7ef;color:#0b7a45">الخزينة (النقدي)</th>' +
-            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc;background:#f0e8ff;color:#6b3fd4">البنك</th>' +
-          '</tr><tr>' +
-            '<th class="num" style="background:#e9f7ef;color:#0b7a45">ما استلمناه</th><th class="num" style="background:#e9f7ef;color:#0b7a45">ما دفعناه</th><th class="num" style="background:#e9f7ef;color:#0b7a45">الرصيد المدور</th>' +
-            '<th class="num" style="background:#f0e8ff;color:#6b3fd4">ما استلمناه</th><th class="num" style="background:#f0e8ff;color:#6b3fd4">ما دفعناه</th><th class="num" style="background:#f0e8ff;color:#6b3fd4">الرصيد المدور</th>' +
-          '</tr></thead>' +
-          '<tbody>' + rowsHtml + '</tbody>' +
-          '<tfoot>' +
-            '<tr style="background:#eef1f7">' +
-              '<td><b>إجمالي الأسبوع</b></td>' +
-              '<td class="num" style="color:var(--ok)"><b>' + money(totalInCash) + '</b></td>' +
-              '<td class="num" style="color:var(--danger)"><b>' + money(totalOutCash) + '</b></td>' +
-              '<td class="num"><b>-</b></td>' +
-              '<td class="num" style="color:var(--ok)"><b>' + money(totalInBank) + '</b></td>' +
-              '<td class="num" style="color:var(--danger)"><b>' + money(totalOutBank) + '</b></td>' +
-              '<td class="num"><b>-</b></td>' +
-            '</tr>' +
-          '</tfoot>' +
-        '</table></div>' +
-      '</div>';
-
-  } else {
-    var rSales = d.sales.filter(function(x){ return x.date >= start && x.date <= end; });
-    var rPur = d.purchases.filter(function(x){ return x.date >= start && x.date <= end; });
-    var rExp = d.expenses.filter(function(x){ return x.date >= start && x.date <= end; });
-
-    var sCash = sum(rSales.filter(function(x){return x.method==='cash';}), 'paid');
-    var sBank = sum(rSales.filter(function(x){return x.method==='bank';}), 'paid');
-    var pCash = sum(rPur.filter(function(x){return x.method==='cash';}), 'paid');
-    var pBank = sum(rPur.filter(function(x){return x.method==='bank';}), 'paid');
-    var eCash = sum(rExp.filter(function(x){return x.method==='cash';}), 'amount');
-    var eBank = sum(rExp.filter(function(x){return x.method==='bank';}), 'amount');
-
-    v.innerHTML = 
-      printHeader() +
-      '<div class="card">' +
-        '<h3 class="no-print">إنشاء تقرير</h3>' + controls +
-        '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
-        '<div class="grid cards mt">' +
-          stat('مبيعات نقدية', money(sCash), 'ok') +
-          stat('مبيعات بنكية', money(sBank), 'bank') +
-          stat('مشتريات نقدية', money(pCash), 'warn') +
-          stat('مشتريات بنكية', money(pBank), 'warn') +
-          stat('مصروفات نقدية', money(eCash), 'danger') +
-          stat('مصروفات بنكية', money(eBank), 'danger') +
-        '</div>' +
-      '</div>';
-  }
-
-  $('#r-type').onchange = function(){ ui.rType = this.value; viewReports(v); };
-  $('#r-apply').onclick = function(){
-    if(ui.rType === 'daily' || ui.rType === 'weekly') { var val = $('#r-date').value; if(val) ui.rDate = val; }
-    if(ui.rType === 'monthly') { var valM = $('#r-month').value; if(valM) ui.rMonth = valM; }
-    if(ui.rType === 'custom'){ var s = $('#r-start').value, e = $('#r-end').value; if(s) ui.rStart = s; if(e) ui.rEnd = e; }
-    viewReports(v);
-  };
-  $('#r-print').onclick = function(){ window.print(); };
-}
-
 function viewDebts(v){
   var d = branchData();
   var customers = d.contacts.filter(function(c){ return c.type === 'customer'; }).map(function(c){ return { c:c, s:contactStats(c) }; }).filter(function(x){ return x.s.balance !== 0; });
@@ -1021,14 +1131,14 @@ function viewContacts(v){
 
 function bindDeletes(v){
   v.querySelectorAll('[data-del]').forEach(function(btn){
-    btn.onclick = function(){
+    btn.onclick = async function(){
       if(!confirm('تأكيد الحذف؟ سيتم تسجيل العملية.')) return;
       var col = btn.dataset.del, id = btn.dataset.id;
       var item = db[col].find(function(x){ return x.id === id; });
       if(!item) return;
       var oldT = totals();
       db[col] = db[col].filter(function(x){ return x.id !== id; });
-      saveToCloud(col, db[col]);
+      await deleteFromCloud(col, id);
       var newT = totals();
       var entityName = col === 'sales' ? 'فاتورة بيع' : col === 'purchases' ? 'فاتورة شراء' : col === 'expenses' ? 'مصروف' : col === 'payments' ? 'دفعة' : 'طرف';
       var desc = 'حذف سجل سابق';
