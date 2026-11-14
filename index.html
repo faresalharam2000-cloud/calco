@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>نظام حسابات الشركة - تقارير مفصولة</title>
+<title>نظام حسابات الشركة - سحابي</title>
 <style>
 :root{--bg:#f4f6fb;--card:#fff;--ink:#1b2430;--muted:#6b7688;--line:#e3e8f0;--primary:#1f6feb;--primary-d:#1558c4;--ok:#0f9d58;--warn:#e8a33d;--danger:#e5484d;--radius:14px}
 *{box-sizing:border-box}
@@ -105,16 +105,24 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   .stat{border:none;padding:5px 0;display:flex;justify-content:space-between;border-bottom:1px dashed #ccc;}
   .stat-value{font-size:16px;}
 }
+/* شاشة التحميل */
+#loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:var(--primary);font-weight:900;font-size:20px;}
+.spinner{width:50px;height:50px;border:5px solid var(--line);border-top-color:var(--primary);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:20px;}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 
+<div id="loading-screen">
+  <div class="spinner"></div>
+  جاري الاتصال بقاعدة البيانات السحابية...
+</div>
+
 <div id="error-overlay">
-  <h2>⚠️ حدث خطأ في الصفحة</h2>
+  <h2>⚠️ حدث خطأ</h2>
   <pre id="error-msg"></pre>
   <div style="margin-top:20px">
     <button onclick="location.reload()">إعادة تحميل</button>
-    <button onclick="try{localStorage.removeItem('accsys_v7');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
   </div>
 </div>
 
@@ -132,9 +140,9 @@ function showError(msg){
 window.addEventListener('error', function(e){ showError((e.message||'') + '\n' + ((e.error && e.error.stack) || '')); });
 
 try {
-var KEY = 'accsys_v7'; 
 var SKEY = 'accsys_session';
-var db = loadDB();
+// تهيئة قاعدة البيانات الفارغة (سيتم ملؤها من السحابة)
+var db = { companies:[], users:[], contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: [] };
 var session = loadSession();
 var ui = { 
   tab:'dashboard', 
@@ -144,32 +152,6 @@ var ui = {
 
 function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
 
-function seedDB(){
-  var cid='comp_demo';
-  return {
-    companies:[{ id:cid, name:'شركة النموذج التجارية', code:'DEMO', password:'1234', currency:'ر.س',
-      branches:[
-        { id:'br_main', name:'الفرع الرئيسي', code:'01', cashOpening:0, bankOpening:0 },
-        { id:'br_jed',  name:'فرع جدة',       code:'02', cashOpening:0, bankOpening:0 }
-      ]}],
-    users:[
-      { id:'u1', companyId:cid, branchId:'br_main', name:'مدير النظام',   username:'admin', password:'1234', role:'مدير' },
-      { id:'u2', companyId:cid, branchId:'br_jed',  name:'مدير فرع جدة', username:'admin', password:'1234', role:'مدير' }
-    ],
-    contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: []
-  };
-}
-function loadDB(){
-  try{ var raw = localStorage.getItem(KEY); if(raw){ var obj = JSON.parse(raw); if(obj && obj.companies) {
-    if(!obj.auditLogs) obj.auditLogs = [];
-    obj.companies.forEach(function(c){ c.branches.forEach(function(b){ if(b.bankOpening === undefined) b.bankOpening = 0; }); });
-    return obj;
-  } } }catch(e){}
-  var s = seedDB();
-  try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){}
-  return s;
-}
-function saveDB(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ showError('تعذر حفظ البيانات: ' + e.message); } }
 function loadSession(){
   try{ var s = JSON.parse(sessionStorage.getItem(SKEY)||'null'); if(s && s.companyId && s.branchId && s.userId) return s; }catch(e){}
   return { companyId:null, branchId:null, userId:null };
@@ -199,8 +181,63 @@ function toast(msg, type){
 function flash(msg, type){ var el = $('#msg'); if(el){ el.textContent = msg; el.className = 'msg ' + (type||'err'); } }
 function stat(label, value, cls){ return '<div class="stat '+(cls||'')+'"><div class="stat-label">'+label+'</div><div class="stat-value">'+value+'</div></div>'; }
 
+// ==========================================
+// دوال الاتصال بالسحابة (Neon + Vercel API)
+// ==========================================
+async function loadDBFromCloud() {
+  try {
+    const res = await fetch('/api/data');
+    if (!res.ok) throw new Error('فشل الاتصال بالخادم');
+    const cloudDb = await res.json();
+    
+    // تحويل الأسماء من قاعدة البيانات (snake_case) إلى الواجهة (camelCase)
+    db.companies = cloudDb.companies.map(c => ({...c, cashOpening: c.cash_opening, bankOpening: c.bank_opening}));
+    db.users = cloudDb.users.map(u => ({...u, companyId: u.company_id, branchId: u.branch_id}));
+    db.contacts = cloudDb.contacts.map(c => ({...c, companyId: c.company_id, branchId: c.branch_id}));
+    db.sales = cloudDb.sales.map(s => ({...s, branchId: s.branch_id, customerId: s.customer_id, customerName: s.customer_name}));
+    db.purchases = cloudDb.purchases.map(p => ({...p, branchId: p.branch_id, supplierId: p.supplier_id, supplierName: p.supplier_name}));
+    db.expenses = cloudDb.expenses.map(e => ({...e, branchId: e.branch_id}));
+    db.payments = cloudDb.payments.map(p => ({...p, branchId: p.branch_id, partyId: p.party_id, partyType: p.party_type, partyName: p.party_name}));
+    db.auditLogs = cloudDb.auditLogs.map(l => ({...l, branchId: l.branch_id, dateStr: l.date_str, oldCash: l.old_cash, newCash: l.new_cash, oldBank: l.old_bank, newBank: l.new_bank}));
+
+    // إذا كانت قاعدة البيانات فارغة، ننشئ شركة افتراضية للتجربة
+    if (db.companies.length === 0) {
+      const cid = 'comp_demo';
+      const demoCompany = { id: cid, name:'شركة النموذج التجارية', code:'DEMO', password:'1234', currency:'ر.س' };
+      const demoBranch1 = { id: 'br_main', companyId: cid, name:'الفرع الرئيسي', code:'01', cashOpening:0, bankOpening:0 };
+      const demoBranch2 = { id: 'br_jed', companyId: cid, name:'فرع جدة', code:'02', cashOpening:0, bankOpening:0 };
+      const demoUser1 = { id: 'u1', companyId: cid, branchId:'br_main', name:'مدير النظام', username:'admin', password:'1234', role:'مدير' };
+      
+      db.companies.push(demoCompany);
+      db.users.push(demoUser1);
+      
+      // حفظ هذه البيانات في السحابة
+      await saveToCloud('companies', [demoCompany]);
+      await saveToCloud('branches', [demoBranch1, demoBranch2]);
+      await saveToCloud('users', [demoUser1]);
+    }
+  } catch (error) {
+    console.error("DB Error:", error);
+    showError("تعذر الاتصال بقاعدة البيانات. تأكد من إعدادات Vercel و Neon. \n" + error.message);
+  }
+}
+
+async function saveToCloud(table, dataArray) {
+  try {
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table, data: dataArray })
+    });
+  } catch (error) {
+    console.error("Save Error:", error);
+    toast('حدث خطأ أثناء الحفظ في السحابة', 'err');
+  }
+}
+// ==========================================
+
 function currentCompany(){ return db.companies.find(function(c){ return c.id===session.companyId; }); }
-function currentBranch(){ var c = currentCompany(); return c && c.branches.find(function(b){ return b.id===session.branchId; }); }
+function currentBranch(){ var c = currentCompany(); return c && c.branches?.find(function(b){ return b.id===session.branchId; }); }
 function currentUser(){ return db.users.find(function(u){ return u.id===session.userId; }); }
 
 function branchData(){
@@ -229,15 +266,15 @@ function totals(){
 }
 
 function logAction(action, entity, details, oldCash, newCash, oldBank, newBank) {
-  if(!db.auditLogs) db.auditLogs = [];
   var u = currentUser();
-  db.auditLogs.push({
+  var log = {
     id: uid(), branchId: session.branchId, timestamp: Date.now(),
     dateStr: new Date().toLocaleString('ar-EG', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }),
     user: u ? u.name : 'غير معروف', action: action, entity: entity, details: details,
     oldCash: oldCash, newCash: newCash, oldBank: oldBank, newBank: newBank
-  });
-  saveDB();
+  };
+  db.auditLogs.push(log);
+  saveToCloud('audit_logs', db.auditLogs);
 }
 
 function contactStats(c){
@@ -258,7 +295,7 @@ function render(){
   if(session.companyId && !db.companies.some(function(c){ return c.id===session.companyId; })) resetSession();
   if(session.branchId){
     var c = currentCompany();
-    if(!c || !c.branches.some(function(b){ return b.id===session.branchId; })){ session.branchId=null; session.userId=null; saveSession(); }
+    if(!c || !c.branches?.some(function(b){ return b.id===session.branchId; })){ session.branchId=null; session.userId=null; saveSession(); }
   }
   if(session.userId && !db.users.some(function(u){ return u.id===session.userId; })){ session.userId=null; saveSession(); }
 
@@ -290,7 +327,7 @@ function viewCompanyLogin(){
 
 function viewBranchSelect(){
   var c = currentCompany();
-  var cards = c.branches.map(function(b){
+  var cards = (c.branches || []).map(function(b){
     return '<button class="branch-card" data-branch="'+b.id+'"><span class="branch-icon">🏢</span><span class="branch-name">'+esc(b.name)+'</span><span class="muted small">رمز: '+esc(b.code)+'</span></button>';
   }).join('');
   root.innerHTML =
@@ -386,7 +423,7 @@ function viewDashboard(v){
     var oldT = totals();
     b.cashOpening = num($('#opening-cash').value);
     b.bankOpening = num($('#opening-bank').value);
-    saveDB();
+    saveToCloud('branches', currentCompany().branches); // حفظ في السحابة
     var newT = totals();
     logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية' + ($('#op-note').value?' | ملاحظة: '+$('#op-note').value:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تم الحفظ'); viewDashboard(v);
@@ -494,7 +531,7 @@ function viewSales(v){
     var c = customers.find(function(x){ return x.id === customerId; });
     var oldT = totals();
     db.sales.push({ id: uid(), branchId: session.branchId, date: $('#s-date').value, customerId: customerId || null, customerName: c ? c.name : 'عميل نقدي', total: total, paid: paid, method: method, note: note });
-    saveDB();
+    saveToCloud('sales', db.sales); // حفظ في السحابة
     var newT = totals();
     logAction('إضافة', 'فاتورة بيع', 'العميل: ' + (c ? c.name : 'نقدي') + ' | المبلغ: ' + paid + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewSales(v);
@@ -540,7 +577,7 @@ function viewPurchases(v){
     var s = suppliers.find(function(x){ return x.id === supplierId; });
     var oldT = totals();
     db.purchases.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, supplierId: supplierId || null, supplierName: s ? s.name : 'مورد نقدي', total: total, paid: paid, method: method, note: note });
-    saveDB();
+    saveToCloud('purchases', db.purchases);
     var newT = totals();
     logAction('إضافة', 'فاتورة شراء', 'المورد: ' + (s ? s.name : 'نقدي') + ' | المبلغ: ' + paid + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewPurchases(v);
@@ -575,7 +612,7 @@ function viewExpenses(v){
     if(amount <= 0) return toast('أدخل مبلغاً صحيحاً', 'err');
     var oldT = totals();
     db.expenses.push({ id: uid(), branchId: session.branchId, date: $('#e-date').value, category: $('#e-cat').value.trim(), amount: amount, method: $('#e-method').value, note: note });
-    saveDB();
+    saveToCloud('expenses', db.expenses);
     var newT = totals();
     logAction('إضافة', 'مصروف', 'النوع: ' + $('#e-cat').value + ' | المبلغ: ' + amount + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewExpenses(v);
@@ -621,7 +658,7 @@ function viewPayments(v){
     var party = d.contacts.find(function(c){ return c.id === partyId; });
     var oldT = totals();
     db.payments.push({ id: uid(), branchId: session.branchId, date: $('#p-date').value, direction: typeSel.value, partyType: typeSel.value === 'in' ? 'customer' : 'supplier', partyId: partyId, partyName: party ? party.name : '', amount: amount, method: method, note: note });
-    saveDB();
+    saveToCloud('payments', db.payments);
     var newT = totals();
     logAction('إضافة', (typeSel.value === 'in' ? 'سند قبض' : 'سند صرف'), 'الطرف: ' + (party ? party.name : '') + ' | المبلغ: ' + amount + (note?' | ملاحظة: '+note:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تمت الإضافة'); viewPayments(v);
@@ -642,8 +679,8 @@ function viewReports(v){
     var diff = dt.getDate() - day + (day === 6 ? 0 : -6);
     var sat = new Date(dt.setDate(diff));
     start = isoLocal(sat);
-    var fri = new Date(sat); fri.setDate(fri.getDate() + 6);
-    end = isoLocal(fri);
+    var thu = new Date(sat); thu.setDate(thu.getDate() + 5);
+    end = isoLocal(thu);
   }
   if(ui.rType === 'monthly'){
     var partsM = ui.rMonth.split('-');
@@ -656,7 +693,7 @@ function viewReports(v){
   var controls = '<div class="form-grid no-print">' +
       '<label>نوع التقرير<select id="r-type">' +
         '<option value="daily" '+(ui.rType==='daily'?'selected':'')+'>يومي</option>' +
-        '<option value="weekly" '+(ui.rType==='weekly'?'selected':'')+'>أسبوعي (يبدأ من السبت)</option>' +
+        '<option value="weekly" '+(ui.rType==='weekly'?'selected':'')+'>أسبوعي (السبت إلى الخميس)</option>' +
         '<option value="monthly" '+(ui.rType==='monthly'?'selected':'')+'>شهري</option>' +
         '<option value="custom" '+(ui.rType==='custom'?'selected':'')+'>مخصص</option>' +
       '</select></label>';
@@ -668,7 +705,7 @@ function viewReports(v){
   controls += '<div class="row" style="gap:8px"><button class="btn primary" id="r-apply" type="button">عرض التقرير</button><button class="btn" id="r-print" type="button">طباعة</button></div></div>';
 
   var periodLabel = (ui.rType === 'daily') ? 'يوم ' + start :
-                    (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الجمعة ' + end :
+                    (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الخميس ' + end :
                     (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth : 'الفترة من ' + start + ' إلى ' + end;
 
   if (ui.rType === 'weekly') {
@@ -685,8 +722,10 @@ function viewReports(v){
     var tempDate = new Date(start + 'T00:00:00');
     
     var totalInCash = 0, totalOutCash = 0, totalInBank = 0, totalOutBank = 0;
-    
-    for (var i = 0; i < 7; i++) {
+    var runningCash = prevCash;
+    var runningBank = prevBank;
+
+    for (var i = 0; i < 6; i++) {
         var currentDate = isoLocal(tempDate);
         var dayName = daysNames[tempDate.getDay()];
         
@@ -701,24 +740,31 @@ function viewReports(v){
 
         totalInCash += inCash; totalOutCash += outCash;
         totalInBank += inBank; totalOutBank += outBank;
+        
+        runningCash += (inCash - outCash);
+        runningBank += (inBank - outBank);
 
         dailyData.push({
             date: currentDate, day: dayName,
-            inCash: inCash, outCash: outCash,
-            inBank: inBank, outBank: outBank
+            inCash: inCash, outCash: outCash, balanceCash: runningCash,
+            inBank: inBank, outBank: outBank, balanceBank: runningBank
         });
         tempDate.setDate(tempDate.getDate() + 1);
     }
 
     var rowsHtml = dailyData.map(function(d){
-        return '<tr>' +
+        var isThursday = (d.day === 'الخميس');
+        var balanceTextCash = isThursday ? '<span style="color:var(--primary);font-weight:bold;font-size:14px">' + money(d.balanceCash) + ' <br><small>(الرصيد المدور الآن)</small></span>' : money(d.balanceCash);
+        var balanceTextBank = isThursday ? '<span style="color:#6b3fd4;font-weight:bold;font-size:14px">' + money(d.balanceBank) + ' <br><small>(الرصيد المدور الآن)</small></span>' : money(d.balanceBank);
+        
+        return '<tr' + (isThursday ? ' style="background:#fef9e7"' : '') + '>' +
             '<td>' + d.day + '<br><span class="muted small">' + d.date + '</span></td>' +
-            '<td class="num" style="color:var(--ok)">' + money(d.inCash) + '</td>' +
-            '<td class="num" style="color:var(--danger)">' + money(d.outCash) + '</td>' +
-            '<td class="num" style="font-weight:bold">' + money(d.inCash - d.outCash) + '</td>' +
-            '<td class="num" style="color:var(--ok)">' + money(d.inBank) + '</td>' +
-            '<td class="num" style="color:var(--danger)">' + money(d.outBank) + '</td>' +
-            '<td class="num" style="font-weight:bold">' + money(d.inBank - d.outBank) + '</td>' +
+            '<td class="num" style="color:var(--ok)">' + (d.inCash ? money(d.inCash) : '-') + '</td>' +
+            '<td class="num" style="color:var(--danger)">' + (d.outCash ? money(d.outCash) : '-') + '</td>' +
+            '<td class="num" style="font-weight:bold">' + balanceTextCash + '</td>' +
+            '<td class="num" style="color:var(--ok)">' + (d.inBank ? money(d.inBank) : '-') + '</td>' +
+            '<td class="num" style="color:var(--danger)">' + (d.outBank ? money(d.outBank) : '-') + '</td>' +
+            '<td class="num" style="font-weight:bold">' + balanceTextBank + '</td>' +
         '</tr>';
     }).join('');
 
@@ -728,23 +774,35 @@ function viewReports(v){
         '<h3 class="no-print">تقرير الأرباح الأسبوعي (مفصول)</h3>' + controls +
         '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
         
-        '<div class="grid cards mt">' +
-          stat('الرصيد المدور (نقدي) من الأسبوع الماضي', money(prevCash), 'ok') +
-          stat('الرصيد المدور (بنك) من الأسبوع الماضي', money(prevBank), 'bank') +
-          stat('إجمالي ما استلمناه (نقدي)', money(totalInCash), 'primary') +
-          stat('إجمالي ما استلمناه (بنك)', money(totalInBank), 'bank') +
-          stat('صافي أرباح (نقدي)', money(totalInCash - totalOutCash), 'primary') +
-          stat('صافي أرباح (بنك)', money(totalInBank - totalOutBank), 'bank') +
+        '<div class="grid two mt">' +
+          '<div class="card" style="border-top:4px solid var(--ok);box-shadow:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)">' +
+            '<h3 style="color:var(--ok)">الخزينة (النقدي)</h3>' +
+            '<div class="tbl-wrap"><table class="tbl"><tbody>' +
+              '<tr><td>الرصيد المدور من الأسبوع الماضي</td><td class="num"><b>' + money(prevCash) + '</b></td></tr>' +
+              '<tr><td>إجمالي ما استلمناه</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
+              '<tr><td>إجمالي ما دفعناه</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
+              '<tr style="background:#f8fafd"><td><b>صافي أرباح الأسبوع</b></td><td class="num"><b style="font-size:16px;color:var(--primary)">' + money(totalInCash - totalOutCash) + '</b></td></tr>' +
+            '</tbody></table></div>' +
+          '</div>' +
+          '<div class="card" style="border-top:4px solid #6b3fd4;box-shadow:none;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)">' +
+            '<h3 style="color:#6b3fd4">البنك</h3>' +
+            '<div class="tbl-wrap"><table class="tbl"><tbody>' +
+              '<tr><td>الرصيد المدور من الأسبوع الماضي</td><td class="num"><b>' + money(prevBank) + '</b></td></tr>' +
+              '<tr><td>إجمالي ما استلمناه</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
+              '<tr><td>إجمالي ما دفعناه</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
+              '<tr style="background:#f8fafd"><td><b>صافي أرباح الأسبوع</b></td><td class="num"><b style="font-size:16px;color:#6b3fd4">' + money(totalInBank - totalOutBank) + '</b></td></tr>' +
+            '</tbody></table></div>' +
+          '</div>' +
         '</div>' +
         
         '<div class="tbl-wrap mt"><table class="tbl">' +
           '<thead><tr>' +
             '<th rowspan="2" style="vertical-align:middle">اليوم</th>' +
-            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc">الخزينة (النقدي)</th>' +
-            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc">البنك</th>' +
+            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc;background:#e9f7ef;color:#0b7a45">الخزينة (النقدي)</th>' +
+            '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc;background:#f0e8ff;color:#6b3fd4">البنك</th>' +
           '</tr><tr>' +
-            '<th class="num">ما استلمناه</th><th class="num">ما دفعناه</th><th class="num">الصافي</th>' +
-            '<th class="num">ما استلمناه</th><th class="num">ما دفعناه</th><th class="num">الصافي</th>' +
+            '<th class="num" style="background:#e9f7ef;color:#0b7a45">ما استلمناه</th><th class="num" style="background:#e9f7ef;color:#0b7a45">ما دفعناه</th><th class="num" style="background:#e9f7ef;color:#0b7a45">الرصيد المدور</th>' +
+            '<th class="num" style="background:#f0e8ff;color:#6b3fd4">ما استلمناه</th><th class="num" style="background:#f0e8ff;color:#6b3fd4">ما دفعناه</th><th class="num" style="background:#f0e8ff;color:#6b3fd4">الرصيد المدور</th>' +
           '</tr></thead>' +
           '<tbody>' + rowsHtml + '</tbody>' +
           '<tfoot>' +
@@ -752,10 +810,10 @@ function viewReports(v){
               '<td><b>إجمالي الأسبوع</b></td>' +
               '<td class="num" style="color:var(--ok)"><b>' + money(totalInCash) + '</b></td>' +
               '<td class="num" style="color:var(--danger)"><b>' + money(totalOutCash) + '</b></td>' +
-              '<td class="num"><b>' + money(totalInCash - totalOutCash) + '</b></td>' +
+              '<td class="num"><b>-</b></td>' +
               '<td class="num" style="color:var(--ok)"><b>' + money(totalInBank) + '</b></td>' +
               '<td class="num" style="color:var(--danger)"><b>' + money(totalOutBank) + '</b></td>' +
-              '<td class="num"><b>' + money(totalInBank - totalOutBank) + '</b></td>' +
+              '<td class="num"><b>-</b></td>' +
             '</tr>' +
           '</tfoot>' +
         '</table></div>' +
@@ -818,7 +876,7 @@ function viewDebts(v){
 }
 
 function viewLedger(v){
-  var logs = (db.auditLogs || []).filter(function(l){ return l.branchId === session.branchId; }).sort(function(a,b){ return b.timestamp - a.timestamp; });
+  var logs = db.auditLogs.filter(function(l){ return l.branchId === session.branchId; }).sort(function(a,b){ return b.timestamp - a.timestamp; });
   
   var rowsHtml = logs.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
       '<th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل والملاحظات</th><th class="num">التغيير في الخزينة</th><th class="num">التغيير في البنك</th>' +
@@ -868,7 +926,7 @@ function viewContacts(v){
     var name = $('#c-name').value.trim(), type = $('#c-type').value;
     if(!name) return toast('أدخل الاسم', 'err');
     db.contacts.push({ id: uid(), companyId: session.companyId, branchId: session.branchId, type: type, name: name });
-    saveDB();
+    saveToCloud('contacts', db.contacts);
     logAction('إضافة', (type === 'customer' ? 'عميل' : 'مورد'), 'الاسم: ' + name, null, null, null, null);
     toast('تمت الإضافة'); viewContacts(v);
   };
@@ -884,7 +942,7 @@ function bindDeletes(v){
       if(!item) return;
       var oldT = totals();
       db[col] = db[col].filter(function(x){ return x.id !== id; });
-      saveDB();
+      saveToCloud(col, db[col]);
       var newT = totals();
       var entityName = col === 'sales' ? 'فاتورة بيع' : col === 'purchases' ? 'فاتورة شراء' : col === 'expenses' ? 'مصروف' : col === 'payments' ? 'دفعة' : 'طرف';
       var desc = 'حذف سجل سابق';
@@ -902,7 +960,15 @@ function bindDeletes(v){
   });
 }
 
-render();
+// نقطة بدء التطبيق
+async function startApp() {
+  await loadDBFromCloud();
+  document.getElementById('loading-screen').style.display = 'none';
+  render();
+}
+
+startApp();
+
 } catch(err) { showError((err && err.stack) || (err && err.message) || String(err)); }
 })();
 </script>
