@@ -393,26 +393,23 @@ function viewDashboard(v){
   };
 }
 
-// ---------------- التقفيلة اليومية (تم التجميع بناءً على الطلب) ----------------
+// ---------------- التقفيلة اليومية ----------------
 function viewDailyClose(v){
   var date = ui.dailyDate;
   var b = currentBranch() || { cashOpening:0, bankOpening:0 };
   var openCash = num(b.cashOpening), openBank = num(b.bankOpening);
 
-  // حساب الرصيد التراكمي قبل هذا اليوم
   db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank += num(x.paid); else openCash += num(x.paid); }});
   db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank -= num(x.paid); else openCash -= num(x.paid); }});
   db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank -= num(x.amount); else openCash -= num(x.amount); }});
   db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') openBank += val; else openCash += val; } else { if(x.method === 'bank') openBank -= val; else openCash -= val; } }});
 
-  // حساب حركة اليوم
   var sCash=0, sBank=0, pCash=0, pBank=0, eCash=0, eBank=0, inCash=0, inBank=0, outCash=0, outBank=0;
   db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') sBank += num(x.paid); else sCash += num(x.paid); }});
   db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') pBank += num(x.paid); else pCash += num(x.paid); }});
   db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') eBank += num(x.amount); else eCash += num(x.amount); }});
   db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') inBank += val; else inCash += val; } else { if(x.method === 'bank') outBank += val; else outCash += val; } }});
 
-  // تجميع المقبوضات والمنصرفات
   var totalInCash = sCash + inCash;
   var totalOutCash = pCash + eCash + outCash;
   var closeCash = openCash + totalInCash - totalOutCash;
@@ -738,9 +735,9 @@ function viewReports(v){
           stat('إجمالي ما استلمناه (بنك)', money(totalInBank), 'bank') +
           stat('صافي أرباح (نقدي)', money(totalInCash - totalOutCash), 'primary') +
           stat('صافي أرباح (بنك)', money(totalInBank - totalOutBank), 'bank') +
-        '</div>
+        '</div>' +
         
-        <div class="tbl-wrap mt"><table class="tbl">' +
+        '<div class="tbl-wrap mt"><table class="tbl">' +
           '<thead><tr>' +
             '<th rowspan="2" style="vertical-align:middle">اليوم</th>' +
             '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc">الخزينة (النقدي)</th>' +
