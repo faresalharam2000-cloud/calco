@@ -141,7 +141,8 @@ window.addEventListener('error', function(e){ showError((e.message||'') + '\n' +
 
 try {
 var SKEY = 'accsys_session';
-var db = { companies:[], users:[], contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: [] };
+// إضافة مصفوفة الفروع هنا
+var db = { companies:[], branches:[], users:[], contacts:[], sales:[], purchases:[], expenses:[], payments:[], auditLogs: [] };
 var session = loadSession();
 var ui = { tab:'dashboard', dailyDate: today(), rType:'weekly', rDate:today(), rStart:today(), rEnd:today(), rMonth:today().slice(0,7) };
 
@@ -183,6 +184,9 @@ async function loadDBFromCloud() {
     const cloudDb = await res.json();
     
     db.companies = cloudDb.companies.map(c => ({...c, cashOpening: c.cash_opening, bankOpening: c.bank_opening}));
+    // إضافة ربط الفروع هنا
+    db.branches = cloudDb.branches.map(b => ({...b, companyId: b.company_id, cashOpening: b.cash_opening, bankOpening: b.bank_opening}));
+    
     db.users = cloudDb.users.map(u => ({...u, companyId: u.company_id, branchId: u.branch_id}));
     db.contacts = cloudDb.contacts.map(c => ({...c, companyId: c.company_id, branchId: c.branch_id}));
     db.sales = cloudDb.sales.map(s => ({...s, branchId: s.branch_id, customerId: s.customer_id, customerName: s.customer_name}));
@@ -199,6 +203,7 @@ async function loadDBFromCloud() {
       const demoUser1 = { id: 'u1', companyId: cid, branchId:'br_main', name:'مدير النظام', username:'admin', password:'1234', role:'مدير' };
       
       db.companies.push(demoCompany);
+      db.branches.push(demoBranch1, demoBranch2);
       db.users.push(demoUser1);
       
       await saveToCloud('companies', [demoCompany]);
@@ -225,7 +230,7 @@ async function saveToCloud(table, dataArray) {
 }
 
 function currentCompany(){ return db.companies.find(function(c){ return c.id===session.companyId; }); }
-function currentBranch(){ var c = currentCompany(); return c && c.branches?.find(function(b){ return b.id===session.branchId; }); }
+function currentBranch(){ return db.branches.find(function(b){ return b.id===session.branchId; }); }
 function currentUser(){ return db.users.find(function(u){ return u.id===session.userId; }); }
 
 function branchData(){
@@ -282,8 +287,7 @@ function contactStats(c){
 function render(){
   if(session.companyId && !db.companies.some(function(c){ return c.id===session.companyId; })) resetSession();
   if(session.branchId){
-    var c = currentCompany();
-    if(!c || !c.branches?.some(function(b){ return b.id===session.branchId; })){ session.branchId=null; session.userId=null; saveSession(); }
+    if(!db.branches.some(function(b){ return b.id===session.branchId; })){ session.branchId=null; session.userId=null; saveSession(); }
   }
   if(session.userId && !db.users.some(function(u){ return u.id===session.userId; })){ session.userId=null; saveSession(); }
 
@@ -343,10 +347,8 @@ function viewCompanyLogin(){
     var newUser = { id: newUserId, companyId: newCompanyId, branchId: newBranchId, name: uName, username: uName, password: uPass, role: 'مدير' };
 
     db.companies.push(newCompany);
+    db.branches.push(newBranch);
     db.users.push(newUser);
-    var compObj = db.companies.find(c => c.id === newCompanyId);
-    if(!compObj.branches) compObj.branches = [];
-    compObj.branches.push(newBranch);
 
     await saveToCloud('companies', [newCompany]);
     await saveToCloud('branches', [newBranch]);
@@ -360,9 +362,12 @@ function viewCompanyLogin(){
 
 function viewBranchSelect(){
   var c = currentCompany();
-  var cards = (c.branches || []).map(function(b){
+  var myBranches = db.branches.filter(function(b){ return b.companyId === c.id; });
+  
+  var cards = myBranches.map(function(b){
     return '<button class="branch-card" data-branch="'+b.id+'"><span class="branch-icon">🏢</span><span class="branch-name">'+esc(b.name)+'</span><span class="muted small">رمز: '+esc(b.code)+'</span></button>';
   }).join('');
+  
   root.innerHTML =
     '<div class="auth-wrap"><div class="auth-card wide">' +
       '<div class="topbar"><div><div style="font-weight:900;font-size:17px">'+esc(c.name)+'</div><div class="muted small">اختر الفرع</div></div><button class="btn ghost sm" id="btn-back-company">تغيير الشركة</button></div>' +
@@ -384,10 +389,10 @@ function viewBranchSelect(){
     e.preventDefault();
     var name = $('#b-name').value.trim(), code = $('#b-code').value.trim();
     if(!name || !code) return flash('أدخل اسم ورمز الفرع');
-    if(c.branches.some(function(b){ return b.code === code; })) return flash('رمز الفرع مستخدم');
+    if(myBranches.some(function(b){ return b.code === code; })) return flash('رمز الفرع مستخدم');
     
     var newB = { id: uid(), companyId: c.id, name: name, code: code, cashOpening: 0, bankOpening: 0 };
-    c.branches.push(newB);
+    db.branches.push(newB);
     await saveToCloud('branches', [newB]);
     toast('تم إضافة الفرع'); render();
   };
@@ -506,7 +511,7 @@ function viewDashboard(v){
     var oldT = totals();
     b.cashOpening = num($('#opening-cash').value);
     b.bankOpening = num($('#opening-bank').value);
-    saveToCloud('branches', [b]); // تحديث الفرع في السحابة
+    saveToCloud('branches', [b]);
     var newT = totals();
     logAction('تعديل', 'رصيد افتتاحي', 'تعديل الأرصدة الافتتاحية' + ($('#op-note').value?' | ملاحظة: '+$('#op-note').value:''), oldT.cash, newT.cash, oldT.bank, newT.bank);
     toast('تم الحفظ'); viewDashboard(v);
