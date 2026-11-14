@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>نظام حسابات الشركة - تقارير الأرباح</title>
+<title>نظام حسابات الشركة - تقارير مفصولة</title>
 <style>
 :root{--bg:#f4f6fb;--card:#fff;--ink:#1b2430;--muted:#6b7688;--line:#e3e8f0;--primary:#1f6feb;--primary-d:#1558c4;--ok:#0f9d58;--warn:#e8a33d;--danger:#e5484d;--radius:14px}
 *{box-sizing:border-box}
@@ -114,7 +114,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   <pre id="error-msg"></pre>
   <div style="margin-top:20px">
     <button onclick="location.reload()">إعادة تحميل</button>
-    <button onclick="try{localStorage.removeItem('accsys_v6');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
+    <button onclick="try{localStorage.removeItem('accsys_v7');sessionStorage.clear();location.reload()}catch(e){location.reload()}">مسح البيانات وإعادة التحميل</button>
   </div>
 </div>
 
@@ -132,7 +132,7 @@ function showError(msg){
 window.addEventListener('error', function(e){ showError((e.message||'') + '\n' + ((e.error && e.error.stack) || '')); });
 
 try {
-var KEY = 'accsys_v6'; 
+var KEY = 'accsys_v7'; 
 var SKEY = 'accsys_session';
 var db = loadDB();
 var session = loadSession();
@@ -393,44 +393,47 @@ function viewDashboard(v){
   };
 }
 
+// ---------------- التقفيلة اليومية (تم التجميع بناءً على الطلب) ----------------
 function viewDailyClose(v){
   var date = ui.dailyDate;
   var b = currentBranch() || { cashOpening:0, bankOpening:0 };
   var openCash = num(b.cashOpening), openBank = num(b.bankOpening);
 
+  // حساب الرصيد التراكمي قبل هذا اليوم
   db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank += num(x.paid); else openCash += num(x.paid); }});
   db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank -= num(x.paid); else openCash -= num(x.paid); }});
   db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { if(x.method === 'bank') openBank -= num(x.amount); else openCash -= num(x.amount); }});
   db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date < date) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') openBank += val; else openCash += val; } else { if(x.method === 'bank') openBank -= val; else openCash -= val; } }});
 
+  // حساب حركة اليوم
   var sCash=0, sBank=0, pCash=0, pBank=0, eCash=0, eBank=0, inCash=0, inBank=0, outCash=0, outBank=0;
   db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') sBank += num(x.paid); else sCash += num(x.paid); }});
   db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') pBank += num(x.paid); else pCash += num(x.paid); }});
   db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { if(x.method === 'bank') eBank += num(x.amount); else eCash += num(x.amount); }});
   db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === date) { var val = num(x.amount); if(x.direction === 'in'){ if(x.method === 'bank') inBank += val; else inCash += val; } else { if(x.method === 'bank') outBank += val; else outCash += val; } }});
 
-  var closeCash = openCash + sCash + inCash - pCash - eCash - outCash;
-  var closeBank = openBank + sBank + inBank - pBank - eBank - outBank;
+  // تجميع المقبوضات والمنصرفات
+  var totalInCash = sCash + inCash;
+  var totalOutCash = pCash + eCash + outCash;
+  var closeCash = openCash + totalInCash - totalOutCash;
+
+  var totalInBank = sBank + inBank;
+  var totalOutBank = pBank + eBank + outBank;
+  var closeBank = openBank + totalInBank - totalOutBank;
 
   var cashSummaryHtml = 
     '<div class="tbl-wrap"><table class="tbl"><tbody>' +
-      '<tr><td>الرصيد في الأمس (ترحيل)</td><td class="num"><b>' + money(openCash) + '</b></td></tr>' +
-      '<tr><td>+ إجمالي المبيعات النقدية</td><td class="num" style="color:var(--ok)">' + money(sCash) + '</td></tr>' +
-      '<tr><td>+ إجمالي المقبوضات النقدية</td><td class="num" style="color:var(--ok)">' + money(inCash) + '</td></tr>' +
-      '<tr><td>- إجمالي المشتريات النقدية</td><td class="num" style="color:var(--danger)">' + money(pCash) + '</td></tr>' +
-      '<tr><td>- إجمالي المصروفات النقدية</td><td class="num" style="color:var(--danger)">' + money(eCash) + '</td></tr>' +
-      '<tr><td>- إجمالي المدفوعات النقدية</td><td class="num" style="color:var(--danger)">' + money(outCash) + '</td></tr>' +
+      '<tr><td>الرصيد المدور من الأمس</td><td class="num"><b>' + money(openCash) + '</b></td></tr>' +
+      '<tr><td>(+) إجمالي المقبوضات اليوم (مبيعات + دفعات)</td><td class="num" style="color:var(--ok)">' + money(totalInCash) + '</td></tr>' +
+      '<tr><td>(-) إجمالي المنصرفات اليوم (مشتريات + مصروفات + دفعات)</td><td class="num" style="color:var(--danger)">' + money(totalOutCash) + '</td></tr>' +
       '<tr style="background:#f8fafd"><td><b>الرصيد المدور الآن (الختامي)</b></td><td class="num"><b style="font-size:16px;color:var(--primary)">' + money(closeCash) + '</b></td></tr>' +
     '</tbody></table></div>';
 
   var bankSummaryHtml = 
     '<div class="tbl-wrap"><table class="tbl"><tbody>' +
-      '<tr><td>الرصيد في الأمس (ترحيل)</td><td class="num"><b>' + money(openBank) + '</b></td></tr>' +
-      '<tr><td>+ إجمالي المبيعات البنكية</td><td class="num" style="color:var(--ok)">' + money(sBank) + '</td></tr>' +
-      '<tr><td>+ إجمالي المقبوضات البنكية</td><td class="num" style="color:var(--ok)">' + money(inBank) + '</td></tr>' +
-      '<tr><td>- إجمالي المشتريات البنكية</td><td class="num" style="color:var(--danger)">' + money(pBank) + '</td></tr>' +
-      '<tr><td>- إجمالي المصروفات البنكية</td><td class="num" style="color:var(--danger)">' + money(eBank) + '</td></tr>' +
-      '<tr><td>- إجمالي المدفوعات البنكية</td><td class="num" style="color:var(--danger)">' + money(outBank) + '</td></tr>' +
+      '<tr><td>الرصيد المدور من الأمس</td><td class="num"><b>' + money(openBank) + '</b></td></tr>' +
+      '<tr><td>(+) إجمالي المقبوضات اليوم (مبيعات + دفعات)</td><td class="num" style="color:var(--ok)">' + money(totalInBank) + '</td></tr>' +
+      '<tr><td>(-) إجمالي المنصرفات اليوم (مشتريات + مصروفات + دفعات)</td><td class="num" style="color:var(--danger)">' + money(totalOutBank) + '</td></tr>' +
       '<tr style="background:#f8fafd"><td><b>الرصيد المدور الآن (الختامي)</b></td><td class="num"><b style="font-size:16px;color:#6b3fd4">' + money(closeBank) + '</b></td></tr>' +
     '</tbody></table></div>';
 
@@ -671,10 +674,9 @@ function viewReports(v){
                     (ui.rType === 'weekly') ? 'الأسبوع من السبت ' + start + ' إلى الجمعة ' + end :
                     (ui.rType === 'monthly') ? 'شهر ' + ui.rMonth : 'الفترة من ' + start + ' إلى ' + end;
 
-  // بناء التقرير الأسبوعي الخاص (حسب الطلب)
   if (ui.rType === 'weekly') {
     var b = currentBranch() || { cashOpening:0, bankOpening:0 };
-    // حساب الرصيد السابق للأسبوع
+    
     var prevCash = num(b.cashOpening), prevBank = num(b.bankOpening);
     db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank += num(x.paid); else prevCash += num(x.paid); }});
     db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date < start) { if(x.method === 'bank') prevBank -= num(x.paid); else prevCash -= num(x.paid); }});
@@ -693,11 +695,9 @@ function viewReports(v){
         
         var inCash=0, outCash=0, inBank=0, outBank=0;
         
-        // ما استلمناه (مبيعات + قبض)
         db.sales.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate) { if(x.method === 'bank') inBank += num(x.paid); else inCash += num(x.paid); }});
         db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate && x.direction === 'in') { if(x.method === 'bank') inBank += num(x.amount); else inCash += num(x.amount); }});
         
-        // ما دفعناه (مشتريات + مصروفات + صرف)
         db.purchases.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate) { if(x.method === 'bank') outBank += num(x.paid); else outCash += num(x.paid); }});
         db.expenses.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate) { if(x.method === 'bank') outBank += num(x.amount); else outCash += num(x.amount); }});
         db.payments.forEach(function(x){ if(x.branchId === session.branchId && x.date === currentDate && x.direction === 'out') { if(x.method === 'bank') outBank += num(x.amount); else outCash += num(x.amount); }});
@@ -728,18 +728,19 @@ function viewReports(v){
     v.innerHTML = 
       printHeader() +
       '<div class="card">' +
-        '<h3 class="no-print">تقرير الأرباح الأسبوعي</h3>' + controls +
+        '<h3 class="no-print">تقرير الأرباح الأسبوعي (مفصول)</h3>' + controls +
         '<div class="print-only"><h3>تقرير مالي: ' + periodLabel + '</h3></div>' +
         
         '<div class="grid cards mt">' +
           stat('الرصيد المدور (نقدي) من الأسبوع الماضي', money(prevCash), 'ok') +
           stat('الرصيد المدور (بنك) من الأسبوع الماضي', money(prevBank), 'bank') +
           stat('إجمالي ما استلمناه (نقدي)', money(totalInCash), 'primary') +
-          stat('إجمالي ما دفعناه (نقدي)', money(totalOutCash), 'warn') +
-          stat('أرباح الأسبوع (نقدي)', money(totalInCash - totalOutCash), 'primary') +
-        '</div>' +
+          stat('إجمالي ما استلمناه (بنك)', money(totalInBank), 'bank') +
+          stat('صافي أرباح (نقدي)', money(totalInCash - totalOutCash), 'primary') +
+          stat('صافي أرباح (بنك)', money(totalInBank - totalOutBank), 'bank') +
+        '</div>
         
-        '<div class="tbl-wrap mt"><table class="tbl">' +
+        <div class="tbl-wrap mt"><table class="tbl">' +
           '<thead><tr>' +
             '<th rowspan="2" style="vertical-align:middle">اليوم</th>' +
             '<th colspan="3" style="text-align:center;border-bottom:1px solid #ccc">الخزينة (النقدي)</th>' +
@@ -759,22 +760,11 @@ function viewReports(v){
               '<td class="num" style="color:var(--danger)"><b>' + money(totalOutBank) + '</b></td>' +
               '<td class="num"><b>' + money(totalInBank - totalOutBank) + '</b></td>' +
             '</tr>' +
-            '<tr style="background:#e3edff">' +
-              '<td colspan="2"><b>إجمالي النقود التي أتتنا (نقدي + بنك)</b></td>' +
-              '<td colspan="2" class="num" style="color:var(--ok);font-size:16px"><b>' + money(totalInCash + totalInBank) + '</b></td>' +
-              '<td colspan="2"><b>إجمالي النقود التي دفعناها (نقدي + بنك)</b></td>' +
-              '<td class="num" style="color:var(--danger);font-size:16px"><b>' + money(totalOutCash + totalOutBank) + '</b></td>' +
-            '</tr>' +
-            '<tr style="background:#e9f7ef">' +
-              '<td colspan="4"><b>صافي أرباح الأسبوع (السيولة الداخلة - الخارجة)</b></td>' +
-              '<td colspan="3" class="num" style="color:var(--primary);font-size:18px"><b>' + money((totalInCash + totalInBank) - (totalOutCash + totalOutBank)) + '</b></td>' +
-            '</tr>' +
           '</tfoot>' +
         '</table></div>' +
       '</div>';
 
   } else {
-    // التقارير العادية (يومي / شهري / مخصص)
     var rSales = d.sales.filter(function(x){ return x.date >= start && x.date <= end; });
     var rPur = d.purchases.filter(function(x){ return x.date >= start && x.date <= end; });
     var rExp = d.expenses.filter(function(x){ return x.date >= start && x.date <= end; });
